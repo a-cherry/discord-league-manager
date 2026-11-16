@@ -18,6 +18,10 @@ services:
     startCommand: node dist/server.js
     # 503 until the header check and recovery have run, 200 after.
     healthCheckPath: /health
+    # Logo-only pushes don't redeploy.
+    buildFilter:
+      ignoredPaths:
+        - assets/**
     # No maxShutdownDelaySeconds: Render refuses it on a service with a disk and
     # kills 30 seconds after SIGTERM. The bot's drain (DRAIN_MS in src/server.ts)
     # stops before that.
