@@ -50,3 +50,6 @@ services:
         sync: false
       - key: GOOGLE_LEAGUE_DB_ID
         sync: false
+      # Optional: warn downgrades the match sequence rules to warnings.
+      - key: GGB_SEQUENCE_RULES
+        sync: false

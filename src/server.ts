@@ -8,6 +8,7 @@ import {
 } from 'discord-interactions';
 import { handleDisbandButton } from './commands/gym.js';
 import { deferredCommands } from './commands/index.js';
+import { handleMatchCancel, handleMatchSave, MATCH_SAVING } from './commands/match.js';
 import { alertStaff, drain, inFlightCount, runDeferred, runDeferredUpdate } from './interactions.js';
 import { startNameSync } from './jobs/name-sync-job.js';
 import type { Runner } from './jobs/runner.js';
@@ -100,6 +101,17 @@ app.post('/interactions', express.raw({ type: '*/*', limit: MAX_BODY }), verifyK
   // The two confirm prompts of /gym disband.
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data.custom_id.startsWith('disband:')) {
     runDeferredUpdate(res, interaction, handleDisbandButton);
+    return;
+  }
+
+  // Save and Cancel on a /match submit warnings post. Save takes the buttons
+  // off at once, so a second press can't start a second save.
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data.custom_id.startsWith('msave:')) {
+    runDeferredUpdate(res, interaction, handleMatchSave, MATCH_SAVING);
+    return;
+  }
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data.custom_id.startsWith('mcancel:')) {
+    runDeferredUpdate(res, interaction, handleMatchCancel);
     return;
   }
 

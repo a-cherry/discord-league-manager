@@ -7,6 +7,11 @@ import { TABS, tabRange, type TabKey } from './schema.js';
 
 export type Row<K extends TabKey> = Record<(typeof TABS)[K]['columns'][number], string>;
 
+// What a write may put in a cell. Reads always give strings; writes may give a
+// number or a boolean so the sheet stores it typed (RAW keeps strings as text).
+export type CellValue = string | number | boolean;
+export type RowInput<K extends TabKey> = Record<(typeof TABS)[K]['columns'][number], CellValue>;
+
 // A row as read, with its 1-based sheet row number for updating it later.
 export interface SheetRow<K extends TabKey> {
   rowNumber: number;
@@ -64,19 +69,29 @@ export async function readTabs<const Keys extends readonly TabKey[]>(...keys: Ke
   }) as RowsOf<Keys>;
 }
 
-const toCells = <K extends TabKey>(key: K, row: Row<K>) =>
-  TABS[key].columns.map((col) => row[col as keyof Row<K>]);
+const toCells = <K extends TabKey>(key: K, row: RowInput<K>) =>
+  TABS[key].columns.map((col) => row[col as keyof RowInput<K>]);
+
+// The first row number of an A1 range such as 'Matches'!A5:L5.
+export function firstRowOf(range: string): number {
+  const m = /!\$?[A-Z]+\$?(\d+)/.exec(range);
+  if (!m) throw new Error(`No row number in range ${range}`);
+  return Number(m[1]);
+}
 
 // RAW keeps Discord IDs as text; parsed, they'd become numbers and lose digits.
-export async function appendRows<K extends TabKey>(key: K, rows: Row<K>[]): Promise<void> {
-  if (!rows.length) return;
-  await getSheets().spreadsheets.values.append({
+// Returns the sheet row number of the first appended row.
+export async function appendRows<K extends TabKey>(key: K, rows: RowInput<K>[]): Promise<number | undefined> {
+  if (!rows.length) return undefined;
+  const res = await getSheets().spreadsheets.values.append({
     spreadsheetId: getLeagueDbId(),
     range: `${tabRange(TABS[key].name)}!A1`,
     valueInputOption: 'RAW',
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values: rows.map((r) => toCells(key, r)) },
   });
+  const range = res.data.updates?.updatedRange;
+  return range ? firstRowOf(range) : undefined;
 }
 
 // Writes only these columns of each row, in one batch; the row's other cells are
@@ -104,7 +119,7 @@ export async function updateColumns<K extends TabKey>(
   });
 }
 
-export async function updateRows<K extends TabKey>(key: K, rows: SheetRow<K>[]): Promise<void> {
+export async function updateRows<K extends TabKey>(key: K, rows: { rowNumber: number; values: RowInput<K> }[]): Promise<void> {
   if (!rows.length) return;
   await getSheets().spreadsheets.values.batchUpdate({
     spreadsheetId: getLeagueDbId(),

@@ -1,63 +1,67 @@
-// Captures the test fixtures for match ingestion. Read-only.
-//   test/fixtures/example-match.json  the Example Match tab's anchor ranges, FORMATTED_VALUE
-//   test/fixtures/league.json         the League DB rows that tab needs: its two gyms,
-//                                     one relegated gym, its ten Trainers, all Seasons
-// Run with --env .env.production to read the production League DB, which has
-// the real gyms and Trainers the template uses. The players are replaced with
-// made-up ones before writing (see anonymize-fixtures.ts), so the fixtures
+// Builds the test fixtures for match ingestion. Read-only against the League DB.
+//   test/fixtures/example-match.json  the Example Match tab as A1 cells, FORMATTED_VALUE
+//   test/fixtures/league.json         the League DB rows that tab needs
+//
+//   npm run capture-match-fixtures -- <real-match.json>
+//
+// The Example Match tab no longer exists in the final template, so the source
+// is a cell file kept outside the repo ({ tab, expected, cells }). Its players
+// are replaced with made-up ones (see anonymize-fixtures.ts), so the fixtures
 // hold no real names or Discord IDs.
+//
+// league.json takes Seasons and one relegated gym from the League DB in .env
+// (dev). Dev doesn't hold the match's gyms or Trainers, so those are built
+// from the match itself: both gyms active, all ten Trainers active on their
+// side's gym. Matches and Decks are empty.
 import './load-env.js';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { getSheets } from '../src/google.js';
-import { MATCH_RANGES } from '../src/match/parse.js';
-import { tabRange } from '../src/schema.js';
+import { readFile, writeFile } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
+import type { Row } from '../src/sheet-rows.js';
 import { readTabs } from '../src/sheet-rows.js';
-import { anonymizeFixtures } from './anonymize-fixtures.js';
+import { anonymizeMatch } from './anonymize-fixtures.js';
 
-// The GGB Match Template workbook and its sample tab.
-const TEMPLATE_ID = '1xaTNBCumylo92Q6-_DVXR-CQFw59i5BOu0Xf4aDS6fg';
-const TAB = 'Example Match';
 const OUT = 'test/fixtures';
+// Emotes as they are in production; they aren't sensitive.
+const EMOTES: Record<string, string> = { G022: ':phoenix~1:', G025: ':summit:' };
 
-const res = await getSheets().spreadsheets.values.batchGet({
-  spreadsheetId: TEMPLATE_ID,
-  ranges: MATCH_RANGES.map((r) => `${tabRange(TAB)}!${r}`),
-  valueRenderOption: 'FORMATTED_VALUE',
-});
-const ranges = Object.fromEntries(
-  MATCH_RANGES.map((r, i) => [r, (res.data.valueRanges![i].values ?? []).map((row) => row.map(String))]),
-);
-const match = { tab: TAB, ranges };
+const source = parseArgs({ allowPositionals: true, strict: false }).positionals[0];
+if (!source) throw new Error('Usage: npm run capture-match-fixtures -- <real-match.json>');
+const real = JSON.parse(await readFile(source, 'utf8'));
+const { match, players } = anonymizeMatch(real);
+const { cells } = match;
 
-// AK2:AL2 are the gym IDs; AP4:AP13 the ten Discord IDs (column F of AK1:AP13).
-const helper = ranges['AK1:AP13'];
-const gymIds = [helper[1]?.[0], helper[1]?.[1]];
-const discordIds = helper.slice(3, 13).map((row) => row[5]);
-if (gymIds.some((g) => !g) || discordIds.length !== 10 || discordIds.some((d) => !/^\d{17,19}$/.test(d ?? ''))) {
-  throw new Error(`Example Match helper block didn't read as expected: ${JSON.stringify(helper)}`);
-}
+const sides = [
+  { gymId: cells.AK2, name: cells.F11, side: 'left' },
+  { gymId: cells.AL2, name: cells.N11, side: 'right' },
+] as const;
+if (sides.some((s) => !s.gymId || !s.name)) throw new Error('AK2/AL2 or F11/N11 is blank in the source');
 
-const [gyms, trainers, seasons] = await readTabs('gyms', 'trainers', 'seasons');
-const relegated = gyms.find((g) => g.values.status === 'relegated');
+const [dbGyms, seasons] = await readTabs('gyms', 'seasons');
+const relegated = dbGyms.find((g) => g.values.status === 'relegated' && !sides.some((s) => s.gymId === g.values.gym_id));
 if (!relegated) throw new Error('No relegated gym in the League DB to use as a fixture');
-const league = {
-  gyms: [...gyms.filter((g) => gymIds.includes(g.values.gym_id)), relegated],
-  trainers: trainers.filter((t) => discordIds.includes(t.values.discord_id)),
-  seasons,
-  matches: [],
-  decks: [],
-};
-if (league.gyms.length !== 3) {
-  const missing = gymIds.filter((g) => !gyms.some((r) => r.values.gym_id === g));
-  throw new Error(`Expected gyms ${gymIds.join(', ')} in the League DB; missing ${missing.join(', ')}`);
-}
-if (league.trainers.length !== 10) {
-  const missing = discordIds.filter((d) => !trainers.some((t) => t.values.discord_id === d));
-  throw new Error(`Expected 10 Trainers, found ${league.trainers.length}; missing ${missing.join(', ')}`);
-}
 
-const out = anonymizeFixtures(match, league);
-await mkdir(OUT, { recursive: true });
-await writeFile(`${OUT}/example-match.json`, JSON.stringify(out.match, null, 2) + '\n');
-await writeFile(`${OUT}/league.json`, JSON.stringify(out.league, null, 2) + '\n');
+const gyms = [
+  ...sides.map((s, i) => ({
+    rowNumber: i + 2,
+    values: { gym_id: s.gymId, name: s.name, abbreviation: '', status: 'active', emote: EMOTES[s.gymId] ?? '' } satisfies Row<'gyms'>,
+  })),
+  relegated,
+];
+const trainers = players.map((p, i) => ({
+  rowNumber: i + 2,
+  values: {
+    discord_id: p.discordId,
+    server_nickname: p.name,
+    username: p.name.replace(/^.* \| /, '').toLowerCase().replaceAll(' ', '_'),
+    country: '',
+    gym_id: sides.find((s) => s.side === p.side)!.gymId,
+    role: 'trainer',
+    leadership: 'none',
+    status: 'active',
+  } satisfies Row<'trainers'>,
+}));
+const league = { gyms, trainers, seasons, matches: [], decks: [] };
+
+await writeFile(`${OUT}/example-match.json`, JSON.stringify(match, null, 2) + '\n');
+await writeFile(`${OUT}/league.json`, JSON.stringify(league, null, 2) + '\n');
 console.log(`Wrote ${OUT}/example-match.json and ${OUT}/league.json`);

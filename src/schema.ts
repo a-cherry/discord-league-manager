@@ -32,6 +32,10 @@ export const TABS = {
     name: 'Match rosters',
     columns: ['match_id', 'gym_id', 'discord_id'],
   },
+  // result_left and result_right hold the result as written on the match sheet,
+  // one of W, L, TIE, DQW, DQL, DQW (W), DQL (W), DQW (R), DQL (R), any case.
+  // Every DQW is a win and every DQL a loss; a TIE is a loss for both Trainers
+  // but scores a point for both sides (see src/match/parse.ts).
   games: {
     name: 'Games',
     columns: [

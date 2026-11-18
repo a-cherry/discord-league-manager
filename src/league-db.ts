@@ -1,6 +1,6 @@
 // Checks the League DB workbook (GOOGLE_LEAGUE_DB_ID) against src/schema.ts.
 import { getSheets } from './google.js';
-import { TABS, tabRange } from './schema.js';
+import { TABS, tabRange, type TabKey } from './schema.js';
 
 export type TabStatus =
   | { kind: 'ok' }
@@ -75,4 +75,37 @@ export async function countRows(spreadsheetId: string, names: string[]): Promise
     ranges: names.map((n) => `${tabRange(n)}!A2:ZZ`),
   });
   return new Map(names.map((n, i) => [n, res.data.valueRanges![i].values?.length ?? 0]));
+}
+
+// deleteDimension requests for these 1-based sheet rows of one tab: one per run
+// of adjacent rows, bottom-up, so each delete leaves the rows above it where
+// they were. The header row can't be deleted.
+export function deleteRequests(sheetId: number, rowNumbers: number[]) {
+  if (rowNumbers.some((n) => !Number.isInteger(n) || n < 2)) throw new Error(`Can't delete rows ${rowNumbers.join(', ')}`);
+  const sorted = [...new Set(rowNumbers)].sort((a, b) => b - a);
+  const runs: { start: number; end: number }[] = [];
+  for (const n of sorted) {
+    const run = runs.at(-1);
+    if (run && run.start === n + 1) run.start = n;
+    else runs.push({ start: n, end: n });
+  }
+  return runs.map((r) => ({
+    deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: r.start - 1, endIndex: r.end } },
+  }));
+}
+
+// Deletes rows from League DB tabs in one batchUpdate, so the deletes land
+// together or not at all. Keyed by tab key; row numbers as read by readTabs.
+// Not retried on failure (see shouldRetry in google.ts).
+export async function deleteRows(rows: Partial<Record<TabKey, number[]>>): Promise<void> {
+  const entries = Object.entries(rows).filter(([, n]) => n?.length) as [TabKey, number[]][];
+  if (!entries.length) return;
+  const spreadsheetId = getLeagueDbId();
+  const ids = await getTabIds(spreadsheetId);
+  const requests = entries.flatMap(([key, numbers]) => {
+    const sheetId = ids.get(TABS[key].name);
+    if (sheetId === undefined) throw new Error(`The League DB has no ${TABS[key].name} tab`);
+    return deleteRequests(sheetId, numbers);
+  });
+  await getSheets().spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
 }
