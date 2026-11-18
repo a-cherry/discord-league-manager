@@ -39,19 +39,11 @@ flowchart LR
 
 ## Design decisions
 
-**Google Sheets is the database.** League staff are non-technical and need to read and correct league data themselves, so the data lives in a spreadsheet they already know. A relational database with a synced sheet was designed and dropped, because a two-way sync cost more than it was worth. The tables are normalized, so a later move to a relational database is an import, not a redesign. Google Sheets has no constraints and no transactions, so the bot enforces every league rule in code. `src/schema.ts` defines every tab and column.
+- **Google Sheets is the database.** Staff are non-technical and need to read and fix league data themselves. Sheets has no constraints or transactions, so the bot enforces every league rule in code. Tables are normalized, so moving to a relational database later is an import.
+- **One process, in-memory locks, startup recovery.** An approval touches several systems, so work is serialized and an approval interrupted by a restart is finished on the next start.
+- **Retries depend on the failure.** Appends are never retried after a timeout, because a retry could write the row twice.
+- **Match sheets never read the database directly.** A staff-only reference sheet sits between them.
 
-**Match sheets never touch the database directly.** Players edit match sheets live through a shared link. A staff-only reference sheet sits between the database and the match sheets, so a match sheet can pull roster, team and deck data without exposing the full database or being able to write back to it.
-
-**HTTP interactions, not a gateway bot.** Discord POSTs each slash command and button press to `POST /interactions`. The bot acknowledges at once and fills in the reply when the sheet and Discord work is done. It always shows as offline in Discord; that is expected.
-
-**Exactly one process.** Work is serialized with in-memory locks, so only one instance may ever run. An approval touches several systems (the database, Discord roles, an announcement), and Sheets has no transactions to roll back a partial one. If the bot stops partway through an approval, startup recovery finishes it on the next start. The cost is a few seconds of downtime on each deploy.
-
-**Graceful deploys.** On SIGTERM the bot stops taking new interactions and waits up to 25 seconds for the ones in progress. `GET /health` returns 503 while starting up or shutting down, so the host only sends traffic to a ready process.
-
-**Retries are chosen by failure type.** Sheets calls retry with backoff, up to 5 times. Rate-limited calls always retry, since they were refused. Server errors and network failures retry too. Appends are never retried after a timeout, because an append that timed out may have landed and a retry could write the row twice.
-
-**The nightly sync retries, then escalates.** The nightly job that refreshes trainer nicknames and removes players who left the server runs at 9 PM Denver. It makes up to 3 attempts, 10 minutes apart, and alerts staff only after the last one fails. An error a retry cannot fix, such as a sheet header someone changed by hand, alerts staff at once. A catch-up run at startup covers a missed night. Sheet layout problems alert staff at most every 10 minutes, however many commands hit them.
 ## Project layout
 
 ```
