@@ -2,8 +2,6 @@
 
 Roster, transfer, and match management for an online competitive card game league, run through Discord and backed by a Google Sheets database that non-technical staff can read and edit. Built and operated as a volunteer project for 32 teams, 380 active players, and 10 staff.
 
-Status: Live: roster transfers with staff approval, nightly nickname and membership sync. In progress: match result ingestion.
-
 Terms: The code uses the league’s own words. A “gym” is a team and a “trainer” is a player.
 
 ## Features
