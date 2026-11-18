@@ -83,6 +83,24 @@ export const isErrorValue = (value: string) => ERROR_VALUES.has(value);
 // Deck names compare ignoring case and spacing. Reversed names stay different.
 export const deckKey = (name: string) => name.toLowerCase().replace(/\s+/g, '');
 
+// Matches typed deck names against the Decks tab: resolve() gives the stored
+// spelling, or the name as typed for a new deck; added lists the new decks in
+// the order first seen. Used by validation (the New deck warnings) and by the
+// save (against Decks as re-read inside the lock), so both agree.
+export function deckMatcher(existing: readonly string[]) {
+  const known = new Map(existing.map((name) => [deckKey(name), name]));
+  const added: string[] = [];
+  const resolve = (typed: string) => {
+    const key = deckKey(typed);
+    if (!known.has(key)) {
+      known.set(key, typed);
+      added.push(typed);
+    }
+    return known.get(key)!;
+  };
+  return { resolve, added };
+}
+
 export type ResultKind = 'W' | 'L' | 'TIE' | 'DQW' | 'DQL';
 export type DqReason = 'W' | 'R';
 export interface Result {

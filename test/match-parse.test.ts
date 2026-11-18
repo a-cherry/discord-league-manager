@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  checkSentinels, clean, deckKey, parseMatch, parseResult, resultsPair, type Result,
+  checkSentinels, clean, deckKey, deckMatcher, parseMatch, parseResult, resultsPair, type Result,
 } from '../src/match/parse.js';
 import { exampleMatch } from './fixtures.js';
 
@@ -76,6 +76,16 @@ test('deck keys ignore case and spacing but keep word order', () => {
   assert.equal(deckKey('Mega Lucario ex Lucario'), deckKey('mega  lucario EX lucario'));
   assert.equal(deckKey('MegaLucario ex Lucario'), deckKey('Mega Lucario ex Lucario'));
   assert.notEqual(deckKey('Iron Valiant Iron Crown'), deckKey('Iron Crown Iron Valiant'));
+});
+
+test('the deck matcher keeps the stored spelling and lists each new deck once, as first typed', () => {
+  const m = deckMatcher(['Mega Lucario ex Lucario', 'Inactive Deck']);
+  assert.equal(m.resolve('mega  lucario EX lucario'), 'Mega Lucario ex Lucario');
+  assert.equal(m.resolve('inactive deck'), 'Inactive Deck');
+  assert.equal(m.resolve('Mega Lucario Exx'), 'Mega Lucario Exx');
+  assert.equal(m.resolve('MEGA LUCARIO EXX'), 'Mega Lucario Exx', 'a second spelling of a new deck uses the first');
+  assert.equal(m.resolve('Lucario Mega Lucario ex'), 'Lucario Mega Lucario ex', 'reversed names stay separate');
+  assert.deepEqual(m.added, ['Mega Lucario Exx', 'Lucario Mega Lucario ex']);
 });
 
 test('the sentinel check passes the template and names each cell that moved', () => {

@@ -2,6 +2,7 @@
 // src/sheet-rows.ts is hardwired to the League DB, so this has its own reads:
 // one spreadsheets.get to map the gid to the tab title, then one batchGet of
 // the anchor ranges with FORMATTED_VALUE (Discord IDs must stay text).
+import type { sheets_v4 } from 'googleapis';
 import { getSheets } from '../google.js';
 import { tabRange } from '../schema.js';
 import { MATCH_RANGES, cellsFromRanges, type MatchCells } from './parse.js';
@@ -21,7 +22,6 @@ export class TabNotFound extends Error {
 
 export interface MatchTab {
   title: string;
-  hidden: boolean;
   cells: MatchCells;
 }
 
@@ -50,16 +50,18 @@ const statusOf = (err: unknown) => {
   return Number(e.response?.status ?? e.status ?? e.code);
 };
 
-export async function readMatchTab({ spreadsheetId, gid }: SheetLink): Promise<MatchTab> {
-  const sheets = getSheets();
+// The Sheets calls this needs; tests pass a stub.
+type SheetsClient = Pick<sheets_v4.Sheets, 'spreadsheets'>;
+
+export async function readMatchTab({ spreadsheetId, gid }: SheetLink, sheets: SheetsClient = getSheets()): Promise<MatchTab> {
   try {
     const meta = await sheets.spreadsheets.get({
-      spreadsheetId, fields: 'sheets.properties(sheetId,title,hidden,gridProperties(rowCount,columnCount))',
+      spreadsheetId, fields: 'sheets.properties(sheetId,title,gridProperties(rowCount,columnCount))',
     });
     const props = meta.data.sheets?.map((s) => s.properties!).find((p) => String(p.sheetId) === gid);
     if (!props?.title) throw new TabNotFound(gid);
     // No cells, so the sentinel check reports it as not a match tab.
-    if (!fitsMatchLayout(props.gridProperties)) return { title: props.title, hidden: Boolean(props.hidden), cells: {} };
+    if (!fitsMatchLayout(props.gridProperties)) return { title: props.title, cells: {} };
     const res = await sheets.spreadsheets.values.batchGet({
       spreadsheetId,
       // Quoted, so a numeric title such as 1 isn't read as a cell reference.
@@ -67,7 +69,7 @@ export async function readMatchTab({ spreadsheetId, gid }: SheetLink): Promise<M
       valueRenderOption: 'FORMATTED_VALUE',
     });
     const values = (res.data.valueRanges ?? []).map((v) => (v.values ?? []).map((row) => row.map(String)));
-    return { title: props.title, hidden: Boolean(props.hidden), cells: cellsFromRanges(values) };
+    return { title: props.title, cells: cellsFromRanges(values) };
   } catch (err) {
     const status = statusOf(err);
     if (status === 403 || status === 404) throw new SheetAccessError(status);

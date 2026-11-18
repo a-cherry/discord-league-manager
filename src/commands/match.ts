@@ -18,13 +18,12 @@ import {
 } from '../match/format.js';
 import { checkSentinels, parseMatch, type Side } from '../match/parse.js';
 import { SavePending, saveMatch, type SaveResult } from '../match/save.js';
-import { crashPoint, type CrashPoint } from '../roster/approval.js';
 import {
   SheetAccessError, TabNotFound, parseSheetLink, readMatchTab, type MatchTab, type SheetLink,
 } from '../match/sheet-reader.js';
 import { sheetsMatchStore, type MatchStore } from '../match/store.js';
 import { validate, type LeagueSnapshot, type Validation } from '../match/validate.js';
-import { isStaff } from '../roster/approval.js';
+import { crashPoint, isStaff, type CrashPoint } from '../roster/approval.js';
 import { rebuildViews } from '../views.js';
 
 export const matchCommand = {
@@ -156,6 +155,7 @@ export function matchHandlers(d: MatchDeps) {
           rebuildViews: d.rebuildViews,
           announce: (left, right) => d.announce(saver.guildId, left, right),
           log: d.log,
+          crash: d.crash,
         },
       );
     } catch (err) {

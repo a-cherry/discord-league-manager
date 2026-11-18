@@ -55,7 +55,6 @@ test('the Example Match validates with no errors and no warnings', () => {
   assert.deepEqual(v.plan!.score, { left: expected.scoreLeft, right: expected.scoreRight });
   assert.equal(v.plan!.games.length, expected.gamesRead);
   assert.deepEqual(v.plan!.identity, { season: 5, stage: 'Regular', week: 1, gymLeftId: 'G022', gymRightId: 'G025' });
-  assert.equal(v.plan!.existingMatchId, undefined);
   assert.equal(v.plan!.rosters.left.length, 5);
   assert.deepEqual(v.plan!.games[10], {
     trainerLeft: '1100000000000000003', deckLeft: 'Mega Blaziken ex Greninja', resultLeft: 'DQL',
@@ -69,7 +68,7 @@ test('against the empty Decks of league.json, each of the seven decks is a New d
   const v = validate(parseMatch(tab, cells), league());
   assert.deepEqual(v.errors, []);
   assert.deepEqual([...v.warnings].sort(), FIXTURE_DECKS.map((d) => `New deck: ${d}`).sort());
-  assert.deepEqual(v.plan!.newDecks.slice(0, 2), ['Mega Lucario ex Lucario', 'Hoopa Ex Mega Sableye EX']);
+  assert.deepEqual(v.warnings.slice(0, 2), ['New deck: Mega Lucario ex Lucario', 'New deck: Hoopa Ex Mega Sableye EX'], 'in the order first seen');
 });
 
 // ---- Season, stage and week ---------------------------------------------------
@@ -134,8 +133,7 @@ test('the week cap counts complete matches only, and not this match', () => {
   const pending = matchRow(15, { status: 'pending' });
   const thisOne = matchRow(16, { gym_left_id: 'G025', gym_right_id: 'G022', score_left: '10', score_right: '9' });
   const v = run(undefined, (db) => fullLeague(db, [...fifteen, pending, thisOne]));
-  assert.deepEqual(v.errors, []);
-  assert.equal(v.plan!.existingMatchId, 'M0017', 'found by identity with the sides swapped');
+  assert.deepEqual(v.errors, [], 'this match, saved with the sides swapped, is not counted');
   const otherWeek = matchRow(17, { week: '2' });
   assert.deepEqual(run(undefined, (db) => fullLeague(db, [...fifteen, otherWeek])).errors, []);
 });
@@ -442,18 +440,17 @@ test('a winner without 10 is a warning, not an error', () => {
 
 // ---- Decks ------------------------------------------------------------------------
 
-test('decks match ignoring case and spacing and keep the Decks spelling, inactive decks included', () => {
+test('decks match ignoring case and spacing, inactive decks included, so they are not new', () => {
   const v = run((c) => (c.G21 = 'mega  lucario EX lucario'), (db) => (db.decks = deckRows(FIXTURE_DECKS, 'FALSE')));
   assert.deepEqual(v.warnings, []);
-  assert.equal(v.plan!.games[0].deckLeft, 'Mega Lucario ex Lucario');
+  assert.equal(v.plan!.games[0].deckLeft, 'mega lucario EX lucario', 'the plan keeps the deck as typed; the save resolves it');
 });
 
 test('a typo or a reversed name is a new deck, added as typed, once', () => {
   const v = run((c) => { c.G21 = 'Mega Lucario Exx'; c.G22 = 'mega lucario exx'; c.N22 = 'Lucario Mega Lucario ex'; });
   assert.deepEqual(v.errors, []);
   assert.deepEqual(v.warnings, ['New deck: Mega Lucario Exx', 'New deck: Lucario Mega Lucario ex']);
-  assert.deepEqual(v.plan!.newDecks, ['Mega Lucario Exx', 'Lucario Mega Lucario ex']);
-  assert.equal(v.plan!.games[1].deckLeft, 'Mega Lucario Exx');
+  assert.equal(v.plan!.games[1].deckLeft, 'mega lucario exx');
 });
 
 // ---- Hash and echoed text ------------------------------------------------------------

@@ -23,9 +23,9 @@ import { withLock } from '../locks.js';
 import { crashPoint, type CrashPoint } from '../roster/approval.js';
 import type { RowInput, SheetRow } from '../sheet-rows.js';
 import { type AnnouncementOutcome, type GymScore, type PriorMatch, type SavedMatch, shouldAnnounce } from './format.js';
-import { deckKey, type Side } from './parse.js';
+import { deckMatcher, type Side } from './parse.js';
 import type { MatchStore } from './store.js';
-import { type SavePlan, sameMatch } from './validate.js';
+import { type SavePlan, otherCompleteInWeek, sameMatch } from './validate.js';
 
 export interface SaveInput {
   plan: SavePlan;
@@ -110,28 +110,16 @@ async function saveLocked(
   const same = state.matches.filter((m) => sameMatch(m.values, identity));
   if (same.length > 1) return { kind: 'duplicate', matchIds: same.map((m) => m.values.match_id) };
   const existing = same[0];
-  const sameWeek = (m: SheetRow<'matches'>) =>
-    m.values.status === 'complete' && Number(m.values.season) === identity.season &&
-    m.values.stage === identity.stage && Number(m.values.week) === identity.week;
-  const others = state.matches.filter((m) => sameWeek(m) && m !== existing).length;
+  const others = otherCompleteInWeek(state.matches, identity);
   if (others >= plan.weekCap) return { kind: 'week-full', count: others };
 
-  // Decks matched again against the fresh tab, so a deck another save just
-  // added is used under its spelling instead of being added twice.
-  const known = new Map(state.decks.map((d) => [deckKey(d.values.name), d.values.name]));
-  const newDecks: string[] = [];
-  const deck = (typed: string) => {
-    const key = deckKey(typed);
-    if (!known.has(key)) {
-      known.set(key, typed);
-      newDecks.push(typed);
-    }
-    return known.get(key)!;
-  };
-  const games = plan.games.map((g) => ({ ...g, deckLeft: deck(g.deckLeft), deckRight: deck(g.deckRight) }));
+  // Decks matched against the fresh tab, so a deck another save just added is
+  // used under its spelling instead of being added twice.
+  const decks = deckMatcher(state.decks.map((d) => d.values.name));
+  const games = plan.games.map((g) => ({ ...g, deckLeft: decks.resolve(g.deckLeft), deckRight: decks.resolve(g.deckRight) }));
 
   // 1. Decks. A failure here leaves at most some decks, which the next submit matches.
-  if (newDecks.length) await store.appendDecks(newDecks);
+  if (decks.added.length) await store.appendDecks(decks.added);
   crash('match.decks');
 
   const matchId = existing?.values.match_id ?? nextMatchId(state.matches);

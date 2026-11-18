@@ -6,15 +6,12 @@ import {
   InteractionResponseType,
   verifyKeyMiddleware,
 } from 'discord-interactions';
-import { handleDisbandButton } from './commands/gym.js';
 import { deferredCommands } from './commands/index.js';
-import { handleMatchCancel, handleMatchSave, MATCH_SAVING } from './commands/match.js';
+import { componentRoute } from './components.js';
 import { alertStaff, drain, inFlightCount, runDeferred, runDeferredUpdate } from './interactions.js';
 import { startNameSync } from './jobs/name-sync-job.js';
 import type { Runner } from './jobs/runner.js';
-import { handleDecision } from './roster/approval.js';
 import { recoverApprovals, settleProcessingCards } from './roster/recovery.js';
-import { CARD_PROCESSING } from './roster/requests.js';
 import { TABS, type TabKey } from './schema.js';
 import { readTabs, SheetLayoutError } from './sheet-rows.js';
 
@@ -89,30 +86,12 @@ app.post('/interactions', express.raw({ type: '*/*', limit: MAX_BODY }), verifyK
     }
   }
 
-  // Approve and Reject on staff approval cards.
-  if (
-    interaction.type === InteractionType.MESSAGE_COMPONENT &&
-    /^(approve|reject):/.test(interaction.data.custom_id)
-  ) {
-    runDeferredUpdate(res, interaction, handleDecision, CARD_PROCESSING);
-    return;
-  }
-
-  // The two confirm prompts of /gym disband.
-  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data.custom_id.startsWith('disband:')) {
-    runDeferredUpdate(res, interaction, handleDisbandButton);
-    return;
-  }
-
-  // Save and Cancel on a /match submit warnings post. Save takes the buttons
-  // off at once, so a second press can't start a second save.
-  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data.custom_id.startsWith('msave:')) {
-    runDeferredUpdate(res, interaction, handleMatchSave, MATCH_SAVING);
-    return;
-  }
-  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data.custom_id.startsWith('mcancel:')) {
-    runDeferredUpdate(res, interaction, handleMatchCancel);
-    return;
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
+    const route = componentRoute(interaction.data.custom_id);
+    if (route) {
+      runDeferredUpdate(res, interaction, route.handler, route.pending);
+      return;
+    }
   }
 
   res.status(400).send({ error: 'unknown interaction' });

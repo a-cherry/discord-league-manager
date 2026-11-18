@@ -38,7 +38,7 @@ function setup(o: {
     readTab: async (link) => {
       if (readError) throw readError;
       assert.deepEqual(link, { spreadsheetId: SHEET_ID, gid: '777' });
-      return { title: '1', hidden: false, cells: structuredClone(cells) };
+      return { title: '1', cells: structuredClone(cells) };
     },
     store,
     postOps: async (text, components) => {

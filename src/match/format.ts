@@ -1,6 +1,6 @@
-// Messages for /match submit: failure and warning lists, the success reply,
-// the week count line, the results announcement and its rule, the #bot-ops
-// record post, and the Save/Cancel custom_ids. Pure: no Sheets or Discord
+// Messages for /match submit: failure and warning lists, the week count line,
+// the results announcement and its rule, the #bot-ops record post, and the
+// Save/Cancel custom_ids. Pure: no Sheets or Discord
 // imports (escapeMarkdown mirrors the one in src/discord.ts for that reason).
 
 export const escapeMarkdown = (text: string) => text.replace(/[\\*_~`|<>[\]()]/g, '\\$&');
@@ -107,7 +107,6 @@ export interface SavedMatch {
   right: GymScore;
   weekCount: number;
 }
-
 
 export type AnnouncementOutcome = 'posted' | 'unchanged' | 'failed';
 const ANNOUNCEMENT_LINE: Record<AnnouncementOutcome, string> = {

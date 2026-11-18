@@ -9,7 +9,7 @@ import type { SheetRow } from '../sheet-rows.js';
 import { echo } from './format.js';
 import {
   type GameField, type GameRow, type ParsedMatch, type Result, type Side,
-  GAME_FIELDS, SIDES, deckKey, isErrorValue, isSequenceLoss, parseResult, resultsPair, scoresPoint,
+  GAME_FIELDS, SIDES, deckKey, deckMatcher, isErrorValue, isSequenceLoss, parseResult, resultsPair, scoresPoint,
 } from './parse.js';
 
 export interface LeagueSnapshot {
@@ -37,7 +37,7 @@ export interface MatchIdentity {
 
 export interface PlannedGame {
   trainerLeft: string; // discord_id
-  deckLeft: string; // the Decks spelling, or as typed for a new deck
+  deckLeft: string;
   resultLeft: string; // as written on the sheet
   resultRight: string;
   deckRight: string;
@@ -48,10 +48,8 @@ export interface PlannedGame {
 // Matches and Decks inside the lock.
 export interface SavePlan {
   identity: MatchIdentity;
-  existingMatchId?: string;
   rosters: Record<Side, string[]>; // distinct discord_ids in slot order
-  games: PlannedGame[];
-  newDecks: string[];
+  games: PlannedGame[]; // decks as typed; the save resolves them against Decks
   score: Record<Side, number>;
   weekCap: number; // half the active gyms; the save checks it again inside the lock
 }
@@ -80,6 +78,14 @@ export const sameMatch = (m: SheetRow<'matches'>['values'], id: MatchIdentity) =
   Number(m.season) === id.season && m.stage === id.stage && Number(m.week) === id.week &&
   ((m.gym_left_id === id.gymLeftId && m.gym_right_id === id.gymRightId) ||
     (m.gym_left_id === id.gymRightId && m.gym_right_id === id.gymLeftId));
+
+// Complete matches already saved for this match's season, stage and week,
+// not counting this match. The week cap compares it with half the active gyms.
+export const otherCompleteInWeek = (matches: SheetRow<'matches'>[], id: MatchIdentity) =>
+  matches.filter(
+    (m) => m.values.status === 'complete' && !sameMatch(m.values, id) &&
+      Number(m.values.season) === id.season && m.values.stage === id.stage && Number(m.values.week) === id.week,
+  ).length;
 
 // A game row that passed its row checks, with each side resolved.
 interface CheckedGame {
@@ -135,21 +141,15 @@ export function validate(match: ParsedMatch, db: LeagueSnapshot, options: Valida
 
   // ---- Identity and the week cap
   let identity: MatchIdentity | undefined;
-  let existingMatchId: string | undefined;
   const weekCap = Math.floor(db.gyms.filter((g) => g.values.status === 'active').length / 2);
   if (configOk.season && configOk.stage && configOk.week && gymsOk) {
     identity = {
       season: Number(config.season), stage: config.stage, week: Number(config.week),
       gymLeftId: match.gymIds.left, gymRightId: match.gymIds.right,
     };
-    const id = identity;
-    existingMatchId = db.matches.find((m) => sameMatch(m.values, id))?.values.match_id;
-    const others = db.matches.filter(
-      (m) => m.values.status === 'complete' && !sameMatch(m.values, id) &&
-        Number(m.values.season) === id.season && m.values.stage === id.stage && Number(m.values.week) === id.week,
-    ).length;
+    const others = otherCompleteInWeek(db.matches, identity);
     if (others >= weekCap) {
-      errors.push(`S${id.season} ${id.stage} W${id.week} already has ${others} matches. Check the season, stage and week cells`);
+      errors.push(`S${identity.season} ${identity.stage} W${identity.week} already has ${others} matches. Check the season, stage and week cells`);
     }
   }
 
@@ -217,12 +217,8 @@ export function validate(match: ParsedMatch, db: LeagueSnapshot, options: Valida
       rowErrors.push(l === r ? `Row ${game.row}: both sides ${echo(l)}` : `Row ${game.row}: results ${echo(l)} and ${echo(r)} don't pair`);
     }
 
-    for (const side of SIDES) {
-      const name = game[FIELDS[side].trainer];
-      if (name && !isErrorValue(name) && !nameTable[side].has(name.toLowerCase())) {
-        rowErrors.push(`Row ${game.row}: ${echo(name)} is not on ${possessive(echo(gymName(side)))} roster`);
-      }
-    }
+    // A name outside the roster slots was already checked as a possible sub
+    // (findSubs), which reported it if it isn't one.
 
     if (rowErrors.length) {
       errors.push(...rowErrors);
@@ -316,29 +312,28 @@ export function validate(match: ParsedMatch, db: LeagueSnapshot, options: Valida
     }
   }
 
-  // ---- Decks: matched ignoring case and spacing, stored under the existing spelling
-  const known = new Map(db.decks.map((d) => [deckKey(d.values.name), d.values.name]));
-  const newDecks: string[] = [];
-  const deckName = (typed: string) => {
-    const key = deckKey(typed);
-    if (!known.has(key)) {
-      known.set(key, typed);
-      newDecks.push(typed);
-    }
-    return known.get(key)!;
-  };
-  const games: PlannedGame[] = checked.map((g) => ({
-    trainerLeft: g.sides.left.discordId ?? '',
-    deckLeft: deckName(g.sides.left.deck),
-    resultLeft: g.game.resultLeft,
-    resultRight: g.game.resultRight,
-    deckRight: deckName(g.sides.right.deck),
-    trainerRight: g.sides.right.discordId ?? '',
-  }));
-  for (const d of newDecks) warnings.push(`New deck: ${echo(d)}`);
+  // ---- Decks not yet in the Decks tab, matched ignoring case and spacing
+  const decks = deckMatcher(db.decks.map((d) => d.values.name));
+  for (const g of checked) for (const side of SIDES) decks.resolve(g.sides[side].deck);
+  for (const d of decks.added) warnings.push(`New deck: ${echo(d)}`);
 
   if (errors.length || !identity) return { errors, warnings };
-  const plan: SavePlan = { identity, existingMatchId, rosters, games, newDecks, score, weekCap };
+  // With no errors every Trainer on a game row has resolved to a Discord ID.
+  // If that ever stops holding, fail here rather than save a blank ID.
+  const idOf = (g: CheckedGame, side: Side) => {
+    const id = g.sides[side].discordId;
+    if (!id) throw new Error(`Row ${g.game.row}: the ${side} Trainer has no Discord ID, though validation passed`);
+    return id;
+  };
+  const games: PlannedGame[] = checked.map((g) => ({
+    trainerLeft: idOf(g, 'left'),
+    deckLeft: g.sides.left.deck,
+    resultLeft: g.game.resultLeft,
+    resultRight: g.game.resultRight,
+    deckRight: g.sides.right.deck,
+    trainerRight: idOf(g, 'right'),
+  }));
+  const plan: SavePlan = { identity, rosters, games, score, weekCap };
   const hash = sheetHash({
     identity,
     rosters,
