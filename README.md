@@ -1,4 +1,4 @@
-# GGB Bot
+# Discord-Integrated League Management System
 
 Roster, transfer, and match management for an online competitive card game league, run through Discord and backed by a Google Sheets database that non-technical staff can read and edit. Built and operated as a volunteer project for 32 teams, 380 active players, and 10 staff.
 
