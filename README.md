@@ -1,6 +1,8 @@
-# GGB Bot
+# Discord-Integrated League Management System
 
-Discord bot for **Global Gym Battles (GGB)**, a team-wars league for Pokémon TCG Pocket. It keeps the league's gyms and trainers in a Google Sheets workbook (the **League DB**) and runs roster changes through staff approval, updating Discord roles and nicknames to match.
+Roster, transfer, and match management for an online competitive card game league, run through Discord and backed by a Google Sheets database that non-technical staff can read and edit. Built and operated as a volunteer project for 32 teams, 380 active players, and 10 staff.
+
+Terms: The code uses the league’s own words. A “gym” is a team and a “trainer” is a player.
 
 ## Features
 
@@ -15,16 +17,31 @@ Discord bot for **Global Gym Battles (GGB)**, a team-wars league for Pokémon TC
 
 Each request posts an approval card in the staff channel. When staff approve it, the bot updates the League DB, changes the members' Discord roles and announces the change.
 
-**Not built yet:** the League Stats views (`src/views.ts` is a placeholder).
+## Status
+
+- **Live in production:** roster transfers with staff approval (`/roster`, `/gym`), and the nightly nickname and membership sync.
+- **Built, tested on dev, deploying:** match result ingestion (`/match submit`, `src/match/`).
+- **Not started:** League Stats views (`src/views.ts` is a placeholder).
 
 ## How it works
 
-- **HTTP interactions, not a gateway bot.** Discord POSTs each slash command and button press to `POST /interactions`. The bot acknowledges at once and fills in the reply when the work is done. It always shows as offline in Discord; that's expected.
-- **Google Sheets is the database.** The bot reads and writes the League DB through a Google service account. `src/schema.ts` defines every tab and its columns.
-- **Exactly one process.** Locks live in memory, so only one instance may ever run. If the bot stops partway through an approval, startup recovery finishes it on the next start.
-- **Graceful deploys.** On SIGTERM the bot stops taking new interactions and waits up to 25 seconds for the ones in progress. `GET /health` returns 503 while starting up or shutting down, so the host only sends traffic to a ready process.
+```mermaid
+flowchart LR
+    D["Discord: slash commands and buttons"] -->|"HTTP interactions, signature-verified"| B["Bot service: one Node.js process"]
+    B -->|"roles, nicknames, announcements"| D
+    B <-->|"read and write"| DB[("League DB: Google Sheets, staff only")]
+    DB --> W["Public roster workbook"]
+    DB --> R["Reference sheet: staff only"]
+    R --> M["Weekly match sheets"]
+    M -->|"/match submit"| B
+```
 
-Detailed bot behavior and the data model are in the GGB Bot Spec and Roster Spec, which are kept outside this repo.
+## Design decisions
+
+- **Google Sheets is the database.** Staff are non-technical and need to read and fix league data themselves. Sheets has no constraints or transactions, so the bot enforces every league rule in code. Tables are normalized, so moving to a relational database later is an import.
+- **One process, in-memory locks, startup recovery.** An approval touches several systems, so work is serialized and an approval interrupted by a restart is finished on the next start.
+- **Retries depend on the failure.** Appends and row deletes are never retried after a timeout, because a retry could write the row twice or delete the rows that moved up.
+- **Match sheets never read the database directly.** A staff-only reference sheet sits between them.
 
 ## Project layout
 
