@@ -16,7 +16,8 @@ const prior = (v: Partial<PriorMatch> = {}): PriorMatch => ({
 
 test('a short list has a header line and every issue', () => {
   assert.equal(issueList('1', 'problem', ['Week is blank', 'No games recorded']), 'Tab 1: 2 problems\nWeek is blank\nNo games recorded');
-  assert.equal(issueList('1', 'warning', ['New deck: X']), 'Tab 1: 1 warning\nNew deck: X');
+  assert.equal(issueList('1', 'warning', ['New deck: X']), 'Tab 1: 1 warning to confirm before saving\nNew deck: X');
+  assert.match(issueList('1', 'warning', ['a', 'b']), /^Tab 1: 2 warnings to confirm before saving\n/);
 });
 
 test('with 100 failures the message stays under 2000 characters and ends with "and N more"', () => {

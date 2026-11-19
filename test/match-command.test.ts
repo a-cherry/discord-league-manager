@@ -173,7 +173,7 @@ test('warnings are posted with Save and Cancel; nothing is written until Save', 
   const r = reply(await h.handleMatch(command()));
   assert.equal(r, `Tab 1 has 7 warnings. Save or Cancel on the post in <#${OPS}>.`);
   assert.equal(h.posted.length, 1);
-  assert.match(h.posted[0].text, /^Tab 1: 7 warnings\nNew deck: Mega Lucario ex Lucario\n/);
+  assert.match(h.posted[0].text, /^Tab 1: 7 warnings to confirm before saving\nNew deck: Mega Lucario ex Lucario\n/);
   const [save, cancel] = buttonIds(h.posted[0]);
   assert.match(save, new RegExp(`^msave:${SHEET_ID}:777:[0-9a-f]{12}$`));
   assert.equal(cancel, `mcancel:${save.slice(-12)}`);
@@ -185,7 +185,7 @@ test('if the warnings post fails, the submitter gets the warnings and the button
   const r = await h.handleMatch(command());
   assert.equal(typeof r, 'object');
   const { reply: text, components } = r as CommandResult;
-  assert.match(text, /^Tab 1: 7 warnings/);
+  assert.match(text, /^Tab 1: 7 warnings to confirm before saving/);
   assert.equal(components![0].components.length, 2);
 });
 
