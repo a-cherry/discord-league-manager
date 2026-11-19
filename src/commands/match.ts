@@ -3,7 +3,7 @@
 //
 // The bot reads the tab, validates it against the League DB, and then:
 //   failures       a public list in #bot-ops, and a pointer to it for the submitter
-//   warnings only  a public list in #bot-ops with Save and Cancel
+//   warnings only  a public list in #bot-ops with Save and Cancel, and no private reply
 //   clean          saves at once and replies to the submitter
 // Save re-reads and re-validates the tab and saves only if the hash of the
 // normalized data still matches the one in its custom_id, so nothing about a
@@ -242,7 +242,8 @@ export function matchHandlers(d: MatchDeps) {
         d.log('the warnings failed to post in #bot-ops', err);
         return { reply: list, components: buttons };
       }
-      return `Tab ${title} has ${warnings.length === 1 ? 'a warning' : `${warnings.length} warnings`}. Save or Cancel on the post in <#${ops}>.`;
+      // The public post is the whole result; a private pointer would repeat it.
+      return { reply: '', noReply: true };
     }
 
     // A clean sheet: the record is its own post, naming who submitted it, and

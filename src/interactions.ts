@@ -4,7 +4,7 @@
 // result when the handler finishes.
 import { InteractionResponseFlags, InteractionResponseType } from 'discord-interactions';
 import type { Response } from 'express';
-import { editOriginalResponse, postFollowup, USER_MENTIONS, type ActionRow, type Member } from './discord.js';
+import { deleteOriginalResponse, editOriginalResponse, postFollowup, USER_MENTIONS, type ActionRow, type Member } from './discord.js';
 import { LockTimeout } from './locks.js';
 import { postStaffAlert } from './roster/requests.js';
 import { SheetLayoutError } from './sheet-rows.js';
@@ -73,11 +73,14 @@ export interface CommandOption {
 }
 
 // The reply is shown only to the person who ran the command, with any buttons.
-// A public message, if any, is posted in the same channel after it.
+// A public message, if any, is posted in the same channel after it. With
+// `noReply`, the handler has already posted its result publicly, and the
+// private "thinking" reply is removed instead of filled in.
 export interface CommandResult {
   reply: string;
   components?: ActionRow[];
   publicMessage?: string;
+  noReply?: boolean;
 }
 
 export type CommandHandler = (interaction: CommandInteraction) => Promise<string | CommandResult>;
@@ -100,6 +103,10 @@ export function runDeferred(res: Response, interaction: CommandInteraction, hand
     // The private reply goes first: a follow-up sent while the reply is still
     // "thinking" would replace it and be private too.
     try {
+      if (result.noReply) {
+        await deleteOriginalResponse(interaction.application_id, interaction.token);
+        return;
+      }
       await editOriginalResponse(interaction.application_id, interaction.token, result.reply, result.components);
       if (result.publicMessage) {
         await postFollowup(interaction.application_id, interaction.token, result.publicMessage);

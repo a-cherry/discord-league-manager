@@ -225,6 +225,11 @@ export const editOriginalResponse = (applicationId: string, token: string, conte
     allowed_mentions: USER_MENTIONS,
   });
 
+// Removes a deferred interaction reply, e.g. a private "thinking" reply whose
+// result was posted publicly instead.
+export const deleteOriginalResponse = (applicationId: string, token: string) =>
+  call('DELETE', `/webhooks/${applicationId}/${token}/messages/@original`);
+
 // A public message in the channel where a command ran, after its deferred
 // (private) reply. Needs no channel permission: it goes through the interaction.
 export const postFollowup = (applicationId: string, token: string, content: string, ephemeral = false) =>

@@ -168,12 +168,12 @@ test('if the #bot-ops post fails, the submitter\'s reply carries the failure lis
   assert.deepEqual(h.logged, ['the failure list failed to post in #bot-ops']);
 });
 
-test('warnings are posted with Save and Cancel; nothing is written until Save', async () => {
+test('warnings are posted with Save and Cancel, with no private reply; nothing is written until Save', async () => {
   const h = setup({ decks: false });
-  const r = reply(await h.handleMatch(command()));
-  assert.equal(r, `Tab 1 has 7 warnings. Save or Cancel on the post in <#${OPS}>.`);
+  const r = await h.handleMatch(command());
+  assert.deepEqual(r, { reply: '', noReply: true }, 'the private reply is removed');
   assert.equal(h.posted.length, 1);
-  assert.match(h.posted[0].text, /^Tab 1: 7 warnings\nNew deck: Mega Lucario ex Lucario\n/);
+  assert.match(h.posted[0].text, /^Tab 1: 7 warnings to confirm before saving\nNew deck: Mega Lucario ex Lucario\n/);
   const [save, cancel] = buttonIds(h.posted[0]);
   assert.match(save, new RegExp(`^msave:${SHEET_ID}:777:[0-9a-f]{12}$`));
   assert.equal(cancel, `mcancel:${save.slice(-12)}`);
@@ -185,7 +185,7 @@ test('if the warnings post fails, the submitter gets the warnings and the button
   const r = await h.handleMatch(command());
   assert.equal(typeof r, 'object');
   const { reply: text, components } = r as CommandResult;
-  assert.match(text, /^Tab 1: 7 warnings/);
+  assert.match(text, /^Tab 1: 7 warnings to confirm before saving/);
   assert.equal(components![0].components.length, 2);
 });
 
