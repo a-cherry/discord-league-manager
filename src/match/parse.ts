@@ -6,7 +6,7 @@
 // edit to the template must update these and the sentinel check.
 //   AK1:AP13  gym_id helper (AK1:AL2), season/stage/week (AM1:AO2),
 //             name to Discord ID table (AO3:AP13)
-//   C17:S19   roster headers (C17, O17) and roster slots (rows 18 and 19)
+//   C17:S19   roster headers (C17 merged to J17, N17 merged to U17) and roster slots (rows 18 and 19)
 //   C21:R41   game rows 21 to 39 and the reported score (K41, M41)
 export const MATCH_RANGES = ['AK1:AP13', 'C17:S19', 'C21:R41'] as const;
 
@@ -52,7 +52,7 @@ export type Side = (typeof SIDES)[number];
 // A tab is a match tab with an intact layout only if these cells read so.
 export const SENTINELS: Record<string, string> = {
   AK1: 'Left gym_id', AL1: 'Right gym_id', AM1: 'Season', AN1: 'Stage', AO1: 'Week',
-  AO3: 'Player', AP3: 'discord_id', C17: 'ROSTER', O17: 'ROSTER',
+  AO3: 'Player', AP3: 'discord_id', C17: 'ROSTER', N17: 'ROSTER',
 };
 
 // Roster slot cells in slot order, and each slot's row in the name to

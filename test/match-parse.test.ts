@@ -92,9 +92,9 @@ test('the sentinel check passes the template and names each cell that moved', ()
   const { cells } = exampleMatch();
   assert.deepEqual(checkSentinels(cells), []);
   cells.AK1 = 'Left gym';
-  delete cells.O17;
+  delete cells.N17;
   assert.deepEqual(checkSentinels(cells), [
     'AK1 reads "Left gym", expected "Left gym_id"',
-    'O17 reads "", expected "ROSTER"',
+    'N17 reads "", expected "ROSTER"',
   ]);
 });

@@ -47,11 +47,11 @@ test('league fixture has the two match gyms, a relegated gym, ten Trainers and S
 test('cellsFromRanges maps batchGet arrays to A1 cells and drops blanks', () => {
   const cells = cellsFromRanges([
     [['Left gym_id', 'Right gym_id'], ['G022', 'G025', '5']],
-    [['ROSTER', '', '', '', '', '', '', '', '', '', '', '', 'ROSTER']],
+    [['ROSTER', '', '', '', '', '', '', '', '', '', '', 'ROSTER']],
     [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], ['', '', '', '', '', '', '', '', '9', '', '10']],
   ]);
   assert.deepEqual(cells, {
     AK1: 'Left gym_id', AL1: 'Right gym_id', AK2: 'G022', AL2: 'G025', AM2: '5',
-    C17: 'ROSTER', O17: 'ROSTER', K41: '9', M41: '10',
+    C17: 'ROSTER', N17: 'ROSTER', K41: '9', M41: '10',
   });
 });
