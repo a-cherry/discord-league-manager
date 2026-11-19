@@ -20,25 +20,55 @@ export function echo(text: string, max = ECHO_MAX): string {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-// Header line, then one line per issue until the budget, then "and N more".
-// A message that gets a line added later passes a smaller budget.
-//   Tab 1: 2 problems
-//   Tab 1: 1 warning to confirm before saving
-export function issueList(tab: string, kind: 'problem' | 'warning', lines: string[], budget = MESSAGE_BUDGET): string {
-  const count = plural(lines.length, kind);
-  const out = [`Tab ${echo(tab)}: ${kind === 'warning' ? `${count} to confirm before saving` : count}`];
-  let length = out[0].length;
+// Bullets until the budget, then "and N more", so a post stays under Discord's limit.
+function bullets(lines: string[], budget: number): string {
+  const out: string[] = [];
+  let length = 0;
   for (let i = 0; i < lines.length; i++) {
+    const line = `- ${lines[i]}`;
     const rest = lines.length - i - 1;
     const tail = rest > 0 ? `\nand ${rest} more`.length : 0;
-    if (length + 1 + lines[i].length + tail > budget) {
+    if (length + line.length + 1 + tail > budget) {
       out.push(`and ${lines.length - i} more`);
       break;
     }
-    out.push(lines[i]);
-    length += 1 + lines[i].length;
+    out.push(line);
+    length += line.length + 1;
   }
   return out.join('\n');
+}
+
+// The heading of a match check post: the week and both gyms when the sheet
+// gives them, else the tab in their place.
+//   **Match check: Week 1, Pocket Refs vs Old Gym**
+//   **Match check: Week 1, Tab 1**   (a gym can't be read)
+export function matchHeading(
+  tab: string, week?: { stage: string; week: number }, gyms?: { left: string; right: string },
+): string {
+  const parts = [
+    ...(week ? [weekLabel(week.stage, week.week, true)] : []),
+    gyms ? `${escapeMarkdown(gyms.left)} vs ${escapeMarkdown(gyms.right)}` : `Tab ${echo(tab)}`,
+  ];
+  return `**Match check: ${parts.join(', ')}**`;
+}
+
+// The public post for a sheet with warnings, above Save and Cancel. A post
+// that gets lines added later (Saved by, the record) passes a smaller budget.
+export function warningsPost(heading: string, tab: string, lines: string[], budget = MESSAGE_BUDGET): string {
+  const one = lines.length === 1;
+  const head = `${heading}\nTab ${echo(tab)} has ${plural(lines.length, 'thing')} to confirm before it's saved:\n\n`;
+  const foot = `\n\nIf ${one ? 'this is' : 'these are'} right, press Save. If not, press Cancel, fix the sheet and submit it again.`;
+  return head + bullets(lines, budget - head.length - foot.length) + foot;
+}
+
+// The public post for a sheet that fails. `changed`: it failed when Save
+// checked it again, after passing with warnings.
+export function failurePost(heading: string, tab: string, lines: string[], budget = MESSAGE_BUDGET, changed = false): string {
+  const what = changed
+    ? `Tab ${echo(tab)} changed after the warnings and now has problems, so it wasn't saved.`
+    : `Tab ${echo(tab)} wasn't saved.`;
+  const head = `${heading}\n${what} Fix ${lines.length === 1 ? 'this' : 'these'} on the sheet, then submit it again:\n\n`;
+  return head + bullets(lines, budget - head.length);
 }
 
 // ---- Week labels ------------------------------------------------------------

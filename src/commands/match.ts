@@ -13,16 +13,16 @@ import { serviceAccountEmail } from '../google.js';
 import type { CommandHandler, ComponentHandler, ComponentInteraction } from '../interactions.js';
 import { announceResult } from '../match/announce.js';
 import {
-  cancelButtonId, echo, escapeMarkdown, issueList, parseSaveButtonId, recordPost, saveButtonId, weekLabel,
-  type GymScore,
+  cancelButtonId, echo, escapeMarkdown, failurePost, matchHeading, parseSaveButtonId, recordPost, saveButtonId,
+  warningsPost, weekLabel, type GymScore,
 } from '../match/format.js';
-import { checkSentinels, parseMatch, type Side } from '../match/parse.js';
+import { checkSentinels, parseMatch, type ParsedMatch, type Side } from '../match/parse.js';
 import { SavePending, saveMatch, type SaveResult } from '../match/save.js';
 import {
   SheetAccessError, TabNotFound, parseSheetLink, readMatchTab, type MatchTab, type SheetLink,
 } from '../match/sheet-reader.js';
 import { sheetsMatchStore, type MatchStore } from '../match/store.js';
-import { validate, type LeagueSnapshot, type Validation } from '../match/validate.js';
+import { STAGES, validate, type LeagueSnapshot, type Validation } from '../match/validate.js';
 import { crashPoint, isStaff, type CrashPoint } from '../roster/approval.js';
 import { rebuildViews } from '../views.js';
 
@@ -88,7 +88,17 @@ export const WARNINGS_BUDGET = 1400;
 
 type Checked =
   | { kind: 'reply'; reply: string }
-  | { kind: 'checked'; tab: MatchTab; snapshot: LeagueSnapshot; validation: Validation };
+  | { kind: 'checked'; tab: MatchTab; snapshot: LeagueSnapshot; validation: Validation; heading: string };
+
+// The post heading from what the sheet gives: the week if season, stage and
+// week read cleanly, and both gyms if both are in the League DB.
+function headingFor(tab: string, match: ParsedMatch, db: LeagueSnapshot): string {
+  const { stage, week } = match.config;
+  const weekOk = /^[1-9]\d*$/.test(week) && (STAGES as readonly string[]).includes(stage);
+  const name = (id: string) => db.gyms.find((g) => g.values.gym_id === id)?.values.name;
+  const [left, right] = [name(match.gymIds.left), name(match.gymIds.right)];
+  return matchHeading(tab, weekOk ? { stage, week: Number(week) } : undefined, left && right ? { left, right } : undefined);
+}
 
 interface Saver {
   guildId: string;
@@ -131,8 +141,9 @@ export function matchHandlers(d: MatchDeps) {
       };
     }
     const snapshot = await d.store.snapshot();
-    const validation = validate(parseMatch(tab.title, tab.cells), snapshot, { sequenceRules: d.sequenceRules() });
-    return { kind: 'checked', tab, snapshot, validation };
+    const parsed = parseMatch(tab.title, tab.cells);
+    const validation = validate(parsed, snapshot, { sequenceRules: d.sequenceRules() });
+    return { kind: 'checked', tab, snapshot, validation, heading: headingFor(tab.title, parsed, snapshot) };
   }
 
   // Saves a sheet that passed, as `saver`, and words the outcome.
@@ -217,18 +228,19 @@ export function matchHandlers(d: MatchDeps) {
     const title = echo(c.tab.title);
 
     if (errors.length) {
-      const list = issueList(c.tab.title, 'problem', errors);
+      const list = failurePost(c.heading, c.tab.title, errors);
       try {
         await d.postOps(list);
       } catch (err) {
         d.log('the failure list failed to post in #bot-ops', err);
         return list;
       }
-      return `Tab ${title} has ${errors.length === 1 ? 'a problem' : `${errors.length} problems`}, listed in <#${ops}>. Nothing was saved.`;
+      const count = errors.length === 1 ? '1 problem' : `${errors.length} problems`;
+      return `Tab ${title} wasn't saved: ${count} to fix, listed in <#${ops}>.`;
     }
 
     if (warnings.length) {
-      const list = issueList(c.tab.title, 'warning', warnings, WARNINGS_BUDGET);
+      const list = warningsPost(c.heading, c.tab.title, warnings, WARNINGS_BUDGET);
       const buttons: ActionRow[] = [{
         type: 1,
         components: [
@@ -242,7 +254,8 @@ export function matchHandlers(d: MatchDeps) {
         d.log('the warnings failed to post in #bot-ops', err);
         return { reply: list, components: buttons };
       }
-      return `Tab ${title} has ${warnings.length === 1 ? 'a warning' : `${warnings.length} warnings`}. Save or Cancel on the post in <#${ops}>.`;
+      const count = warnings.length === 1 ? '1 thing' : `${warnings.length} things`;
+      return `Tab ${title} has ${count} to confirm before it's saved. Save or Cancel on the post in <#${ops}>.`;
     }
 
     // A clean sheet: the record is its own post, naming who submitted it, and
@@ -272,7 +285,7 @@ export function matchHandlers(d: MatchDeps) {
     if (c.kind === 'reply') return { reply: c.reply };
     const base = interaction.message.content;
     if (c.validation.errors.length) {
-      return { message: `${issueList(c.tab.title, 'problem', c.validation.errors, WARNINGS_BUDGET)}\nThe sheet now fails, so nothing was saved.` };
+      return { message: failurePost(c.heading, c.tab.title, c.validation.errors, WARNINGS_BUDGET, true) };
     }
     if (c.validation.hash !== ids.hash) {
       return { message: `${base}\nThe sheet changed after these warnings, so nothing was saved. Submit the tab again.` };

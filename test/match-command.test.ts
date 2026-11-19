@@ -155,25 +155,32 @@ test('if the record post fails, the match stays saved and the reply carries the 
 test('failures are posted publicly in #bot-ops and the submitter gets a pointer', async () => {
   const h = setup({ cells: (c) => { delete c.AO2; c.K21 = 'W'; c.M21 = 'W'; } });
   const r = reply(await h.handleMatch(command()));
-  assert.equal(r, `Tab 1 has 2 problems, listed in <#${OPS}>. Nothing was saved.`);
+  assert.equal(r, `Tab 1 wasn't saved: 2 problems to fix, listed in <#${OPS}>.`);
   assert.equal(h.posted.length, 1);
-  assert.equal(h.posted[0].text, 'Tab 1: 2 problems\nWeek is blank\nRow 21: both sides W');
+  assert.equal(h.posted[0].text, [
+    '**Match check: Phoenix vs Summit**',
+    "Tab 1 wasn't saved. Fix these on the sheet, then submit it again:",
+    '',
+    '- Week is blank',
+    '- Row 21: both sides W',
+  ].join('\n'), 'the week is blank, so the heading leaves it out');
   assert.equal(h.posted[0].components, undefined);
   assert.deepEqual(h.store.calls, ['snapshot'], 'nothing is written');
 });
 
 test('if the #bot-ops post fails, the submitter\'s reply carries the failure list', async () => {
   const h = setup({ failPost: true, cells: (c) => { delete c.AO2; } });
-  assert.equal(reply(await h.handleMatch(command())), 'Tab 1: 1 problem\nWeek is blank');
+  assert.equal(reply(await h.handleMatch(command())), "**Match check: Phoenix vs Summit**\nTab 1 wasn't saved. Fix this on the sheet, then submit it again:\n\n- Week is blank");
   assert.deepEqual(h.logged, ['the failure list failed to post in #bot-ops']);
 });
 
 test('warnings are posted with Save and Cancel; nothing is written until Save', async () => {
   const h = setup({ decks: false });
   const r = reply(await h.handleMatch(command()));
-  assert.equal(r, `Tab 1 has 7 warnings. Save or Cancel on the post in <#${OPS}>.`);
+  assert.equal(r, `Tab 1 has 7 things to confirm before it's saved. Save or Cancel on the post in <#${OPS}>.`);
   assert.equal(h.posted.length, 1);
-  assert.match(h.posted[0].text, /^Tab 1: 7 warnings to confirm before saving\nNew deck: Mega Lucario ex Lucario\n/);
+  assert.match(h.posted[0].text, /^\*\*Match check: Week 1, Phoenix vs Summit\*\*\nTab 1 has 7 things to confirm before it's saved:\n\n- New deck: Mega Lucario ex Lucario\n/);
+  assert.match(h.posted[0].text, /\n\nIf these are right, press Save\. If not, press Cancel, fix the sheet and submit it again\.$/);
   const [save, cancel] = buttonIds(h.posted[0]);
   assert.match(save, new RegExp(`^msave:${SHEET_ID}:777:[0-9a-f]{12}$`));
   assert.equal(cancel, `mcancel:${save.slice(-12)}`);
@@ -185,7 +192,7 @@ test('if the warnings post fails, the submitter gets the warnings and the button
   const r = await h.handleMatch(command());
   assert.equal(typeof r, 'object');
   const { reply: text, components } = r as CommandResult;
-  assert.match(text, /^Tab 1: 7 warnings to confirm before saving/);
+  assert.match(text, /^\*\*Match check: Week 1, Phoenix vs Summit\*\*\nTab 1 has 7 things to confirm/);
   assert.equal(components![0].components.length, 2);
 });
 
@@ -220,9 +227,10 @@ test('Save on an unchanged sheet saves as whoever pressed it, with the record un
 
 test('the longest warnings post still fits with the record under it', async () => {
   const many = Array.from({ length: 100 }, (_, i) => `New deck: ${'x'.repeat(30)} ${i}`);
-  const { issueList } = await import('../src/match/format.js');
+  const { matchHeading, warningsPost } = await import('../src/match/format.js');
   const { WARNINGS_BUDGET } = await import('../src/commands/match.js');
-  const longest = issueList('16', 'warning', many, WARNINGS_BUDGET);
+  const heading = matchHeading('16', { stage: 'Playoff', week: 12 }, { left: 'x'.repeat(90), right: 'y'.repeat(90) });
+  const longest = warningsPost(heading, '16', many, WARNINGS_BUDGET);
   const record = 'Saved by <@1300000000000000002>\n---\nMatch Sheet Resubmitted M0014\nPlayoff Week 12: ' +
     `${'x'.repeat(90)} 10-9 ${'y'.repeat(90)}\nScore changed: ${'x'.repeat(90)} 9 to 10, ${'y'.repeat(90)} 10 to 9\n` +
     'Announcement: not needed, score unchanged\nPlayoff W12: 16 matches saved';
@@ -250,7 +258,12 @@ test('Save on a sheet that now fails shows the failure list instead', async () =
   const { h, post, saveId } = await warned();
   h.editCells((c) => { delete c.AO2; });
   const result = await h.handleSave(press(saveId, post.text)) as ComponentResult;
-  assert.equal(result.message, 'Tab 1: 1 problem\nWeek is blank\nThe sheet now fails, so nothing was saved.');
+  assert.equal(result.message, [
+    '**Match check: Phoenix vs Summit**',
+    "Tab 1 changed after the warnings and now has problems, so it wasn't saved. Fix this on the sheet, then submit it again:",
+    '',
+    '- Week is blank',
+  ].join('\n'));
   assert.equal(h.store.tabs.matches.length, 0);
 });
 
