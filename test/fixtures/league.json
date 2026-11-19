@@ -1,7 +1,7 @@
 {
   "gyms": [
     {
-      "rowNumber": 23,
+      "rowNumber": 2,
       "values": {
         "gym_id": "G022",
         "name": "Phoenix",
@@ -11,7 +11,7 @@
       }
     },
     {
-      "rowNumber": 26,
+      "rowNumber": 3,
       "values": {
         "gym_id": "G025",
         "name": "Summit",
@@ -21,32 +21,19 @@
       }
     },
     {
-      "rowNumber": 8,
+      "rowNumber": 4,
       "values": {
-        "gym_id": "G007",
+        "gym_id": "G003",
         "name": "Dragonite's Requiem",
         "abbreviation": "",
         "status": "relegated",
-        "emote": ":dragoniterequiem:"
+        "emote": ""
       }
     }
   ],
   "trainers": [
     {
-      "rowNumber": 35,
-      "values": {
-        "discord_id": "1200000000000000001",
-        "server_nickname": "Right Player 01",
-        "username": "right_player_01",
-        "country": "",
-        "gym_id": "G025",
-        "role": "trainer",
-        "leadership": "none",
-        "status": "active"
-      }
-    },
-    {
-      "rowNumber": 55,
+      "rowNumber": 2,
       "values": {
         "discord_id": "1100000000000000001",
         "server_nickname": "Left Player 01",
@@ -59,7 +46,7 @@
       }
     },
     {
-      "rowNumber": 62,
+      "rowNumber": 3,
       "values": {
         "discord_id": "1100000000000000002",
         "server_nickname": "Left Player 02",
@@ -72,7 +59,20 @@
       }
     },
     {
-      "rowNumber": 97,
+      "rowNumber": 4,
+      "values": {
+        "discord_id": "1100000000000000003",
+        "server_nickname": "Left Player 03",
+        "username": "left_player_03",
+        "country": "",
+        "gym_id": "G022",
+        "role": "trainer",
+        "leadership": "none",
+        "status": "active"
+      }
+    },
+    {
+      "rowNumber": 5,
       "values": {
         "discord_id": "1100000000000000004",
         "server_nickname": "Left Player 04",
@@ -85,46 +85,7 @@
       }
     },
     {
-      "rowNumber": 126,
-      "values": {
-        "discord_id": "1200000000000000002",
-        "server_nickname": "Right Player 02",
-        "username": "right_player_02",
-        "country": "",
-        "gym_id": "G025",
-        "role": "trainer",
-        "leadership": "leader",
-        "status": "active"
-      }
-    },
-    {
-      "rowNumber": 129,
-      "values": {
-        "discord_id": "1200000000000000003",
-        "server_nickname": "Right Player 03",
-        "username": "right_player_03",
-        "country": "",
-        "gym_id": "G025",
-        "role": "trainer",
-        "leadership": "vice-leader",
-        "status": "active"
-      }
-    },
-    {
-      "rowNumber": 132,
-      "values": {
-        "discord_id": "1200000000000000004",
-        "server_nickname": "Right Player 04",
-        "username": "right_player_04",
-        "country": "",
-        "gym_id": "G025",
-        "role": "trainer",
-        "leadership": "none",
-        "status": "active"
-      }
-    },
-    {
-      "rowNumber": 140,
+      "rowNumber": 6,
       "values": {
         "discord_id": "1100000000000000005",
         "server_nickname": "Left Player 05",
@@ -137,11 +98,11 @@
       }
     },
     {
-      "rowNumber": 144,
+      "rowNumber": 7,
       "values": {
-        "discord_id": "1200000000000000005",
-        "server_nickname": "Right Player 05",
-        "username": "right_player_05",
+        "discord_id": "1200000000000000001",
+        "server_nickname": "Right Player 01",
+        "username": "right_player_01",
         "country": "",
         "gym_id": "G025",
         "role": "trainer",
@@ -150,13 +111,52 @@
       }
     },
     {
-      "rowNumber": 379,
+      "rowNumber": 8,
       "values": {
-        "discord_id": "1100000000000000003",
-        "server_nickname": "Left Player 03",
-        "username": "left_player_03",
+        "discord_id": "1200000000000000002",
+        "server_nickname": "Right Player 02",
+        "username": "right_player_02",
         "country": "",
-        "gym_id": "G022",
+        "gym_id": "G025",
+        "role": "trainer",
+        "leadership": "none",
+        "status": "active"
+      }
+    },
+    {
+      "rowNumber": 9,
+      "values": {
+        "discord_id": "1200000000000000003",
+        "server_nickname": "Right Player 03",
+        "username": "right_player_03",
+        "country": "",
+        "gym_id": "G025",
+        "role": "trainer",
+        "leadership": "none",
+        "status": "active"
+      }
+    },
+    {
+      "rowNumber": 10,
+      "values": {
+        "discord_id": "1200000000000000004",
+        "server_nickname": "Right Player 04",
+        "username": "right_player_04",
+        "country": "",
+        "gym_id": "G025",
+        "role": "trainer",
+        "leadership": "none",
+        "status": "active"
+      }
+    },
+    {
+      "rowNumber": 11,
+      "values": {
+        "discord_id": "1200000000000000005",
+        "server_nickname": "Right Player 05",
+        "username": "right_player_05",
+        "country": "",
+        "gym_id": "G025",
         "role": "trainer",
         "leadership": "none",
         "status": "active"
@@ -168,9 +168,9 @@
       "rowNumber": 2,
       "values": {
         "season": "5",
-        "start_date": "46341",
-        "end_date": "46539",
-        "active": "true"
+        "start_date": "2026-11-01",
+        "end_date": "2026-12-31",
+        "active": "TRUE"
       }
     }
   ],

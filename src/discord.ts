@@ -185,6 +185,15 @@ export const USER_MENTIONS = { parse: ['users'] };
 export const postMessage = (channelId: string, content: string, components?: ActionRow[], pingRoleIds: string[] = []) =>
   call('POST', `/channels/${channelId}/messages`, { content, components, allowed_mentions: { ...USER_MENTIONS, roles: pingRoleIds } });
 
+// A message with one embed and no content, e.g. the match results post. No mention pings.
+export interface Embed {
+  description: string;
+  timestamp?: string;
+  color?: number;
+}
+export const postEmbed = (channelId: string, embed: Embed) =>
+  call('POST', `/channels/${channelId}/messages`, { embeds: [embed], allowed_mentions: { parse: [] } });
+
 // For a message that lists many members, e.g. the import report: no mention pings.
 export const postSilentMessage = (channelId: string, content: string) =>
   call('POST', `/channels/${channelId}/messages`, { content, allowed_mentions: { parse: [] } });

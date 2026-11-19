@@ -8,7 +8,9 @@ const read = (name: string) => JSON.parse(readFileSync(new URL(`fixtures/${name}
 
 export interface MatchFixture {
   tab: string;
-  ranges: MatchCells;
+  // What parsing and validating the fixture should produce.
+  expected: { scoreLeft: number; scoreRight: number; errors: string[]; warnings: string[]; gamesRead: number };
+  cells: MatchCells;
 }
 
 export interface LeagueFixture {
@@ -21,4 +23,3 @@ export interface LeagueFixture {
 
 export const exampleMatch = (): MatchFixture => read('example-match.json');
 export const league = (): LeagueFixture => read('league.json');
-

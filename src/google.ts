@@ -16,18 +16,23 @@ interface FailedCall {
 // minute's rate limit (60 reads per minute) is waited out. A rate-limited call
 // was refused, so it's always safe to retry. Other failures are retried except
 // on appends: an append that timed out may have landed, and a retry could
-// write its row twice.
+// write its row twice. Structural batchUpdates (row deletes) aren't retried
+// either: a delete that landed, retried, would delete the rows that moved up.
+// values:batchUpdate writes fixed cells, so it is safe to repeat.
+export function shouldRetry(err: FailedCall): boolean {
+  const config = err.config.retryConfig!;
+  if ((config.currentRetryAttempt ?? 0) >= config.retry!) return false;
+  const status = err.response?.status;
+  if (status === 429) return true;
+  const url = String(err.config.url);
+  if (url.includes(':append') || /\/spreadsheets\/[^/]+:batchUpdate/.test(url)) return false;
+  return status === undefined || status === 408 || status >= 500;
+}
+
 const RETRY = {
   retry: 5,
   httpMethodsToRetry: ['GET', 'PUT', 'POST'],
-  shouldRetry: (err: FailedCall) => {
-    const config = err.config.retryConfig!;
-    if ((config.currentRetryAttempt ?? 0) >= config.retry!) return false;
-    const status = err.response?.status;
-    if (status === 429) return true;
-    if (String(err.config.url).includes(':append')) return false;
-    return status === undefined || status === 408 || status >= 500;
-  },
+  shouldRetry,
 };
 
 let clients: { sheets: sheets_v4.Sheets } | undefined;
@@ -48,3 +53,10 @@ function getClients() {
 }
 
 export const getSheets = () => getClients().sheets;
+
+// The service account's email, which staff share a match workbook with.
+export function serviceAccountEmail(): string {
+  const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_B64;
+  if (!b64) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY_B64 is not set');
+  return JSON.parse(Buffer.from(b64, 'base64').toString('utf8')).client_email;
+}

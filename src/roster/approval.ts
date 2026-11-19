@@ -142,11 +142,15 @@ function claimChange(req: RosterRequest, gym: Gym): string {
 // approved or recovery stops the bot at that point. GGB_FAIL_AT, a comma-separated list
 // of those points, card (posting a new request's staff card), views, role (one
 // member's role) or announce, throws once at each, as a failed Sheets or
-// Discord call would.
+// Discord call would. Match saves add match.decks, match.pending,
+// match.delete, match.rosters, match.games, match.finalize, match.views,
+// match.announce and match.log (see src/match/save.ts).
 const failed = new Set<string>();
-export function crashPoint(
-  point: 'claimed' | 'history' | 'written' | 'approved' | 'recovery' | 'card' | 'views' | 'role' | 'announce',
-): void {
+export type CrashPoint =
+  | 'claimed' | 'history' | 'written' | 'approved' | 'recovery' | 'card' | 'views' | 'role' | 'announce'
+  | 'match.decks' | 'match.pending' | 'match.delete' | 'match.rosters' | 'match.games' | 'match.finalize'
+  | 'match.views' | 'match.announce' | 'match.log';
+export function crashPoint(point: CrashPoint): void {
   if (process.env.GGB_CRASH_AT === point) {
     console.error(`GGB_CRASH_AT=${point}: stopping the bot mid-approval`);
     process.exit(1);

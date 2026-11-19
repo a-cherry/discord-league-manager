@@ -26,7 +26,7 @@ export function liveNameSyncDeps(guildId: string): NameSyncDeps {
       };
     },
     readTrainers: async () => (await readTabs('trainers'))[0],
-    appendHistory: (rows) => appendRows('rosterHistory', rows),
+    appendHistory: async (rows) => { await appendRows('rosterHistory', rows); },
     writeMembership: (rows) => updateColumns('trainers', ['gym_id', 'role', 'leadership', 'status'], rows),
     writeNames: (rows) => updateColumns('trainers', ['server_nickname', 'username'], rows),
     rebuildViews,

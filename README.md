@@ -12,6 +12,7 @@ Terms: The code uses the league’s own words. A “gym” is a team and a “tr
 | `/roster cancel-request` | Gym Leaders and Vice-Leaders | Withdraw a pending request |
 | `/gym rebrand`, `disband` | Gym Leaders | Request a new name, abbreviation and emote, or to disband (off-season only) |
 | `/gym cancel-request` | Gym Leaders | Withdraw a pending gym request |
+| `/match submit sheet:<link>` | Staff, in the staff channel | Check one match tab and save it to the League DB, then announce the result. Sheets with warnings get Save and Cancel buttons |
 | `/ping` | Anyone | Check the bot is responding |
 
 Each request posts an approval card in the staff channel. When staff approve it, the bot updates the League DB, changes the members' Discord roles and announces the change.
@@ -19,7 +20,7 @@ Each request posts an approval card in the staff channel. When staff approve it,
 ## Status
 
 - **Live in production:** roster transfers with staff approval (`/roster`, `/gym`), and the nightly nickname and membership sync.
-- **In progress:** match result ingestion (`src/match/` has the sheet layout, parser and test fixtures so far).
+- **Built, tested on dev, deploying:** match result ingestion (`/match submit`, `src/match/`).
 - **Not started:** League Stats views (`src/views.ts` is a placeholder).
 
 ## How it works
@@ -32,14 +33,14 @@ flowchart LR
     DB --> W["Public roster workbook"]
     DB --> R["Reference sheet: staff only"]
     R --> M["Weekly match sheets"]
-    M -.->|"match ingestion (in progress)"| B
+    M -->|"/match submit"| B
 ```
 
 ## Design decisions
 
 - **Google Sheets is the database.** Staff are non-technical and need to read and fix league data themselves. Sheets has no constraints or transactions, so the bot enforces every league rule in code. Tables are normalized, so moving to a relational database later is an import.
 - **One process, in-memory locks, startup recovery.** An approval touches several systems, so work is serialized and an approval interrupted by a restart is finished on the next start.
-- **Retries depend on the failure.** Appends are never retried after a timeout, because a retry could write the row twice.
+- **Retries depend on the failure.** Appends and row deletes are never retried after a timeout, because a retry could write the row twice or delete the rows that moved up.
 - **Match sheets never read the database directly.** A staff-only reference sheet sits between them.
 
 ## Project layout
@@ -50,7 +51,7 @@ src/
   interactions.ts    Deferred replies and button handling
   commands/          Slash command definitions and handlers (index.ts lists them)
   roster/            Roster requests: checks, approval cards, approval, Discord roles, recovery
-  match/             Match sheet parsing (in progress)
+  match/             Match sheets: parse, validate, save, announce (pure modules have no I/O)
   schema.ts          League DB tabs and columns
   sheet-rows.ts      Typed reads and writes of League DB rows
   google.ts          Sheets client with timeouts and retries
@@ -81,12 +82,15 @@ Requires Node 22 or later, a Discord application and test server, and a Google C
     | `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` | Developer Portal > your app > General Information |
     | `DISCORD_BOT_TOKEN` | Developer Portal > Bot > Reset Token |
     | `DISCORD_GUILD_ID` | The server the bot runs in |
-    | `DISCORD_STAFF_CHANNEL_ID` | Where approval cards and staff notices go |
+    | `DISCORD_STAFF_CHANNEL_ID` | Where approval cards and staff notices go (#bot-ops). `/match submit` runs here and posts its failure lists, warnings and record posts here |
     | `DISCORD_TRANSFER_ANNOUNCEMENTS_CHANNEL_ID` | Where approved roster changes are announced |
-    | `DISCORD_MATCH_RESULTS_ANNOUNCEMENTS_CHANNEL_ID` | Where match results will be announced (not used yet) |
+    | `DISCORD_MATCH_RESULTS_ANNOUNCEMENTS_CHANNEL_ID` | Where match results are announced |
     | `DISCORD_STAFF_ROLE_IDS` | Comma-separated IDs of the roles allowed to approve and reject requests |
     | `GOOGLE_SERVICE_ACCOUNT_KEY_B64` | The service account key, base64-encoded: `base64 -i key.json` |
     | `GOOGLE_LEAGUE_DB_ID` | The workbook ID, from its URL: `docs.google.com/spreadsheets/d/<ID>/edit` |
+    | `GGB_SEQUENCE_RULES` | Optional. `warn` turns the second-loss and repeat checks on match sheets into warnings instead of failures. Leave unset (`fail`) unless a rule proves wrong in practice |
+
+    Match workbooks are separate from the League DB: share each with the service account (Viewer is enough) so `/match submit` can read it.
 
 2. **Set up a League DB workbook.** Create an empty Google Sheet and share it as Editor with the service account (the `client_email` in its key). Then build the tabs and check access:
 
@@ -110,7 +114,7 @@ Requires Node 22 or later, a Discord application and test server, and a Google C
 
     Set the dev app's Interactions Endpoint URL (Developer Portal > General Information) to the tunnel URL plus `/interactions`. The tunnel URL changes each time cloudflared restarts.
 
-5. **Discord server settings.** The bot needs Manage Roles, and its role must sit above every gym, gym fan, trainer and leadership role. To limit `/roster` and `/gym` to the request and staff channels, use Server Settings > Integrations > the bot.
+5. **Discord server settings.** The bot needs Manage Roles, and its role must sit above every gym, gym fan, trainer and leadership role. To limit `/roster` and `/gym` to the request and staff channels, and `/match` to the staff channel, use Server Settings > Integrations > the bot. The bot also needs Send Messages and Embed Links in the match results channel.
 
 ## Commands
 

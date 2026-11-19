@@ -1,70 +1,42 @@
-// Replaces the real players in the captured match fixtures with made-up ones,
-// so the fixtures can live in a public repo. Pure: no Sheets imports.
+// Replaces the real players in a match fixture with made-up ones, so the
+// fixtures can live in a public repo. Pure: no Sheets imports.
 //
-// Each roster name in AK4:AL13 becomes "Left Player NN" or "Right Player NN"
-// (a gym tag before " | " is kept, so tagged names still look tagged). Every
-// cell that exactly matches a real name is rewritten with the same fake name,
-// so the roster, game rows, name table and League DB rows still agree. Each
-// Trainer's Discord ID becomes a fake 19-digit ID, their username a slug of
-// the fake name, and their country is blanked.
+// The name table AO4:AP13 lists the left slots in rows 4 to 8 and the right
+// slots in rows 9 to 13. Each name becomes "Left Player NN" or "Right Player
+// NN" (a gym tag before " | " is kept, so tagged names still look tagged) and
+// each Discord ID a fake 19-digit one. Every cell that exactly matches a real
+// name or ID is rewritten, so the roster slots, game rows and name table
+// still agree.
 
-type Cells = Record<string, string[][]>;
-interface Row {
-  values: Record<string, string>;
+export interface Player {
+  name: string;
+  discordId: string;
+  side: 'left' | 'right';
 }
 
-export function anonymizeFixtures<M extends { ranges: Cells }, L extends { trainers: Row[] }>(
+export function anonymizeMatch<M extends { cells: Record<string, string> }>(
   match: M,
-  league: L,
-): { match: M; league: L } {
-  const helper = match.ranges['AK1:AP13'];
-  const names = new Map<string, string>();
-  helper.slice(3, 13).forEach((row, i) => {
-    const n = String(i + 1).padStart(2, '0');
-    [`Left Player ${n}`, `Right Player ${n}`].forEach((fake, side) => {
-      const real = row[side];
-      if (!real) return;
-      const tag = real.includes(' | ') ? real.slice(0, real.indexOf(' | ') + 3) : '';
-      names.set(real, tag + fake);
-    });
-  });
-
-  // AO4:AP13: the name of each Trainer who played and their Discord ID.
-  const ids = new Map<string, string>();
-  const usernames = new Map<string, string>();
-  for (const row of helper.slice(3, 13)) {
-    const [name, id] = [row[4], row[5]];
-    const fake = names.get(name);
-    if (!fake || !id) throw new Error(`Name table entry ${JSON.stringify(name)} isn't on either roster`);
-    const [side, n] = [fake.includes('Left Player') ? '1' : '2', fake.slice(-2)];
-    ids.set(id, `1${side}000000000000000${n}`);
-    usernames.set(id, fake.replace(/^.* \| /, '').toLowerCase().replaceAll(' ', '_'));
+): { match: M; players: Player[] } {
+  const swaps = new Map<string, string>();
+  const players: Player[] = [];
+  for (let row = 4; row <= 13; row++) {
+    const [name, id] = [match.cells[`AO${row}`], match.cells[`AP${row}`]];
+    if (!name) continue;
+    if (!/^\d{17,19}$/.test(id ?? '')) throw new Error(`AP${row} isn't a Discord ID: ${JSON.stringify(id)}`);
+    const side = row <= 8 ? 'left' : 'right';
+    const n = String(side === 'left' ? row - 3 : row - 8).padStart(2, '0');
+    const tag = name.includes(' | ') ? name.slice(0, name.indexOf(' | ') + 3) : '';
+    const fake = { name: `${tag}${side === 'left' ? 'Left' : 'Right'} Player ${n}`, discordId: `1${side === 'left' ? 1 : 2}${'0'.repeat(15)}${n}`, side } as const;
+    swaps.set(name, fake.name).set(id, fake.discordId);
+    players.push(fake);
   }
 
-  const swap = (s: string) => names.get(s) ?? ids.get(s) ?? s;
-  const ranges = Object.fromEntries(
-    Object.entries(match.ranges).map(([r, rows]) => [r, rows.map((row) => row.map(swap))]),
-  );
-  const trainers = league.trainers.map((t) => {
-    const id = t.values.discord_id;
-    if (!ids.has(id)) throw new Error(`Trainer ${id} isn't in the name table`);
-    return {
-      ...t,
-      values: {
-        ...t.values,
-        discord_id: ids.get(id)!,
-        server_nickname: swap(t.values.server_nickname),
-        username: usernames.get(id)!,
-        country: '',
-      },
-    };
-  });
-  const out = { match: { ...match, ranges }, league: { ...league, trainers } };
+  const cells = Object.fromEntries(Object.entries(match.cells).map(([a1, v]) => [a1, swaps.get(v) ?? v]));
+  const out = { ...match, cells };
 
-  // Nothing real may survive: no name, ID or username anywhere in the output.
+  // Nothing real may survive anywhere in the output.
   const text = JSON.stringify(out);
-  const real = [...names.keys(), ...ids.keys(), ...league.trainers.map((t) => t.values.username)];
-  const leaked = real.filter((s) => s && text.includes(JSON.stringify(s)));
-  if (leaked.length) throw new Error(`Anonymizing left real values in the fixtures: ${leaked.join(', ')}`);
-  return out;
+  const leaked = [...swaps.keys()].filter((s) => text.includes(JSON.stringify(s)));
+  if (leaked.length) throw new Error(`Anonymizing left real values in the fixture: ${leaked.join(', ')}`);
+  return { match: out, players };
 }
