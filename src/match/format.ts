@@ -22,11 +22,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 // Header line, then one line per issue until the budget, then "and N more".
 // A message that gets a line added later passes a smaller budget.
-//   Tab 1: 2 problems
-//   Tab 1: 1 warning to confirm before saving
 export function issueList(tab: string, kind: 'problem' | 'warning', lines: string[], budget = MESSAGE_BUDGET): string {
-  const count = plural(lines.length, kind);
-  const out = [`Tab ${echo(tab)}: ${kind === 'warning' ? `${count} to confirm before saving` : count}`];
+  const out = [`Tab ${echo(tab)}: ${plural(lines.length, kind)}`];
   let length = out[0].length;
   for (let i = 0; i < lines.length; i++) {
     const rest = lines.length - i - 1;
