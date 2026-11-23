@@ -485,3 +485,51 @@ test('a cell containing @everyone or a role mention does not ping, and long text
   assert.ok(echoed.replace(/\\|​/g, '').length <= 40, echoed);
   assert.ok(echoed.endsWith('…'));
 });
+
+// ---- No Trainer (//) -----------------------------------------------------------
+
+// Row 31 as a DQ given before the game: no Trainer on either side, as on a
+// sheet where one gym didn't submit decks in time.
+const forfeitRow = (c: MatchCells, row = 31) => {
+  c[`C${row}`] = '//';
+  c[`G${row}`] = '//';
+  c[`N${row}`] = 'Deck Not Submitted In Time';
+  c[`R${row}`] = '//';
+};
+
+test('a // Trainer row with DQ results scores, saves with no Trainer or deck, and is one warning', () => {
+  const v = run(forfeitRow);
+  assert.deepEqual(v.errors, []);
+  assert.deepEqual(v.warnings, ['Row 31: no Trainer (//), saved as a DQ game with no Trainer or deck']);
+  assert.deepEqual(v.plan!.score, { left: 9, right: 10 });
+  assert.deepEqual(v.plan!.games[10], {
+    trainerLeft: '', deckLeft: '', resultLeft: 'DQL', resultRight: 'DQW', deckRight: '', trainerRight: '',
+  });
+});
+
+test('// rows are not subs, need no deck, and several share one warning', () => {
+  const v = run((c) => {
+    forfeitRow(c);
+    delete c.G31;
+    delete c.N31;
+    c.C31 = 'Left Player 03';
+  });
+  assert.deepEqual(v.errors, ['Row 31: left deck blank'], 'only the // side may leave its deck blank');
+  const two = run((c) => {
+    forfeitRow(c);
+    delete c.N31;
+    forfeitRow(c, 30);
+    c.K30 = 'DQW';
+    c.M30 = 'DQL';
+  });
+  assert.deepEqual(two.errors, []);
+  assert.deepEqual(two.warnings, ['Rows 30 and 31: no Trainer (//), saved as DQ games with no Trainer or deck']);
+});
+
+test('a // Trainer row needs DQW and DQL results', () => {
+  const v = run((c) => {
+    forfeitRow(c);
+    setRow(c, 31, 'L', 'W');
+  });
+  assert.deepEqual(v.errors, ['Row 31: a // Trainer needs DQW and DQL results']);
+});

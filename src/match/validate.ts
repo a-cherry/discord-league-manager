@@ -90,8 +90,17 @@ export const otherCompleteInWeek = (matches: SheetRow<'matches'>[], id: MatchIde
 // A game row that passed its row checks, with each side resolved.
 interface CheckedGame {
   game: GameRow;
-  sides: Record<Side, { name: string; discordId?: string; deck: string; result: Result }>;
+  sides: Record<Side, { name: string; discordId?: string; deck: string; result: Result; noTrainer: boolean }>;
 }
+
+// A Trainer cell of exactly // means no Trainer played: a DQ awarded before
+// the game, such as a gym that didn't submit decks in time. The row must be a
+// DQW/DQL pair. It scores as usual but belongs to no Trainer, so it skips the
+// sub and sequence checks, its deck cell is ignored, and it saves with a
+// blank Trainer and deck.
+export const NO_TRAINER = '//';
+export const isNoTrainer = (name: string) => name === NO_TRAINER;
+const isDq = (r: Result) => r.kind === 'DQW' || r.kind === 'DQL';
 
 export function validate(match: ParsedMatch, db: LeagueSnapshot, options: ValidateOptions = {}): Validation {
   const errors: string[] = [];
@@ -202,7 +211,8 @@ export function validate(match: ParsedMatch, db: LeagueSnapshot, options: Valida
     const rowErrors: string[] = [];
     const broken = GAME_FIELDS.filter((f) => isErrorValue(game[f]));
     for (const f of broken) rowErrors.push(`Row ${game.row}: ${FIELD_LABEL[f]} shows ${game[f]}`);
-    const blank = GAME_FIELDS.filter((f) => !game[f]);
+    const noTrainer = Object.fromEntries(SIDES.map((side) => [side, isNoTrainer(game[FIELDS[side].trainer])])) as Record<Side, boolean>;
+    const blank = GAME_FIELDS.filter((f) => !game[f] && !SIDES.some((side) => noTrainer[side] && FIELDS[side].deck === f));
     if (blank.length) rowErrors.push(`Row ${game.row}: ${joinAnd(blank.map((f) => FIELD_LABEL[f]))} blank`);
 
     const results = {} as Record<Side, Result | undefined>;
@@ -217,6 +227,11 @@ export function validate(match: ParsedMatch, db: LeagueSnapshot, options: Valida
       rowErrors.push(l === r ? `Row ${game.row}: both sides ${echo(l)}` : `Row ${game.row}: results ${echo(l)} and ${echo(r)} don't pair`);
     }
 
+    if ((noTrainer.left || noTrainer.right) && results.left && results.right &&
+        !(isDq(results.left) && isDq(results.right))) {
+      rowErrors.push(`Row ${game.row}: a ${NO_TRAINER} Trainer needs DQW and DQL results`);
+    }
+
     // A name outside the roster slots was already checked as a possible sub
     // (findSubs), which reported it if it isn't one.
 
@@ -229,11 +244,20 @@ export function validate(match: ParsedMatch, db: LeagueSnapshot, options: Valida
       game,
       sides: Object.fromEntries(SIDES.map((side) => [side, {
         name: game[FIELDS[side].trainer],
-        discordId: nameTable[side].get(game[FIELDS[side].trainer].toLowerCase()),
-        deck: game[FIELDS[side].deck],
+        discordId: noTrainer[side] ? undefined : nameTable[side].get(game[FIELDS[side].trainer].toLowerCase()),
+        deck: noTrainer[side] ? '' : game[FIELDS[side].deck],
         result: results[side]!,
+        noTrainer: noTrainer[side],
       }])) as CheckedGame['sides'],
     });
+  }
+
+  const forfeitRows = checked.filter((g) => g.sides.left.noTrainer || g.sides.right.noTrainer).map((g) => String(g.game.row));
+  if (forfeitRows.length) {
+    warnings.push(
+      `${forfeitRows.length === 1 ? 'Row' : 'Rows'} ${joinAnd(forfeitRows)}: no Trainer (${NO_TRAINER}), ` +
+        `saved as ${forfeitRows.length === 1 ? 'a DQ game' : 'DQ games'} with no Trainer or deck`,
+    );
   }
 
   // ---- Sequence rules, per Trainer, over the rows that passed. A sub
@@ -258,7 +282,10 @@ export function validate(match: ParsedMatch, db: LeagueSnapshot, options: Valida
     const subOf = new Map(active.map((s) => [s.key, s]));
     const trainerKey = (g: CheckedGame) => subOf.get(g.sides[side].name.toLowerCase())?.replacedKey ?? ownKey(g);
     const byTrainer = new Map<string, CheckedGame[]>();
-    for (const g of checked) byTrainer.set(trainerKey(g), [...(byTrainer.get(trainerKey(g)) ?? []), g]);
+    for (const g of checked) {
+      if (g.sides[side].noTrainer) continue;
+      byTrainer.set(trainerKey(g), [...(byTrainer.get(trainerKey(g)) ?? []), g]);
+    }
 
     const nameAt = (row: number) => checked.find((g) => g.game.row === row)!.sides[side].name;
     const repeaters: string[] = [];
@@ -314,13 +341,14 @@ export function validate(match: ParsedMatch, db: LeagueSnapshot, options: Valida
 
   // ---- Decks not yet in the Decks tab, matched ignoring case and spacing
   const decks = deckMatcher(db.decks.map((d) => d.values.name));
-  for (const g of checked) for (const side of SIDES) decks.resolve(g.sides[side].deck);
+  for (const g of checked) for (const side of SIDES) if (!g.sides[side].noTrainer) decks.resolve(g.sides[side].deck);
   for (const d of decks.added) warnings.push(`New deck: ${echo(d)}`);
 
   if (errors.length || !identity) return { errors, warnings };
   // With no errors every Trainer on a game row has resolved to a Discord ID.
   // If that ever stops holding, fail here rather than save a blank ID.
   const idOf = (g: CheckedGame, side: Side) => {
+    if (g.sides[side].noTrainer) return '';
     const id = g.sides[side].discordId;
     if (!id) throw new Error(`Row ${g.game.row}: the ${side} Trainer has no Discord ID, though validation passed`);
     return id;
@@ -338,8 +366,8 @@ export function validate(match: ParsedMatch, db: LeagueSnapshot, options: Valida
     identity,
     rosters,
     games: checked.map((g) => [
-      g.sides.left.discordId, deckKey(g.sides.left.deck), g.game.resultLeft,
-      g.game.resultRight, deckKey(g.sides.right.deck), g.sides.right.discordId,
+      g.sides.left.noTrainer ? NO_TRAINER : g.sides.left.discordId, deckKey(g.sides.left.deck), g.game.resultLeft,
+      g.game.resultRight, deckKey(g.sides.right.deck), g.sides.right.noTrainer ? NO_TRAINER : g.sides.right.discordId,
     ]),
   });
   return { errors, warnings, plan, hash };
@@ -381,7 +409,7 @@ function findSubs(
     const played = new Map<string, { name: string; rows: number[] }>();
     for (const g of match.games) {
       const name = g[field];
-      if (!name || isErrorValue(name)) continue;
+      if (!name || isErrorValue(name) || isNoTrainer(name)) continue;
       const key = name.toLowerCase();
       if (!played.has(key)) played.set(key, { name, rows: [] });
       played.get(key)!.rows.push(g.row);

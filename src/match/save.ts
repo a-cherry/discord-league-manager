@@ -116,7 +116,9 @@ async function saveLocked(
   // Decks matched against the fresh tab, so a deck another save just added is
   // used under its spelling instead of being added twice.
   const decks = deckMatcher(state.decks.map((d) => d.values.name));
-  const games = plan.games.map((g) => ({ ...g, deckLeft: decks.resolve(g.deckLeft), deckRight: decks.resolve(g.deckRight) }));
+  // A blank deck is a no-Trainer (//) side and stays blank.
+  const resolve = (deck: string) => (deck ? decks.resolve(deck) : '');
+  const games = plan.games.map((g) => ({ ...g, deckLeft: resolve(g.deckLeft), deckRight: resolve(g.deckRight) }));
 
   // 1. Decks. A failure here leaves at most some decks, which the next submit matches.
   if (decks.added.length) await store.appendDecks(decks.added);

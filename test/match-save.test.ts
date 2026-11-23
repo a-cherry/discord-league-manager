@@ -318,3 +318,17 @@ test('the appended row number is read from the update range', () => {
   assert.equal(firstRowOf('Games!A120:H138'), 120);
   assert.equal(firstRowOf("'Match rosters'!$A$7:$C$16"), 7);
 });
+
+test('a no-Trainer (//) game saves blank Trainers and decks, and adds no blank deck', async () => {
+  const plan = examplePlan();
+  plan.games[10] = { ...plan.games[10], trainerLeft: '', deckLeft: '', deckRight: '', trainerRight: '' };
+  const h = harness();
+  await saveMatch(input(plan), h.deps());
+  const { decks, games } = h.store.tabs;
+  assert.equal(decks.length, 7);
+  assert.ok(decks.every((d) => d.name !== ''));
+  assert.deepEqual(games[10], {
+    match_id: 'M0001', game_number: 11, trainer_left: '', deck_left: '',
+    result_left: 'DQL', result_right: 'DQW', deck_right: '', trainer_right: '',
+  });
+});
