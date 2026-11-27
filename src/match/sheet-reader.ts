@@ -6,6 +6,11 @@ import type { sheets_v4 } from 'googleapis';
 import { getSheets } from '../google.js';
 import { tabRange } from '../schema.js';
 import { MATCH_RANGES, cellsFromRanges, type MatchCells } from './parse.js';
+import type { SheetLink } from '../sheet-links.js';
+
+// Moved to src/sheet-links.ts so the API can use it without importing Sheets;
+// re-exported so callers of this module are unchanged.
+export { parseSheetLink, type SheetLink } from '../sheet-links.js';
 
 // The workbook can't be opened: not shared with the service account, or no such workbook.
 export class SheetAccessError extends Error {
@@ -23,19 +28,6 @@ export class TabNotFound extends Error {
 export interface MatchTab {
   title: string;
   cells: MatchCells;
-}
-
-export interface SheetLink {
-  spreadsheetId: string;
-  gid: string;
-}
-
-// A link copied from an open tab: .../spreadsheets/d/<id>/edit#gid=<gid>. The
-// gid may also come as ?gid= or &gid=. Undefined parts are missing.
-export function parseSheetLink(link: string): Partial<SheetLink> {
-  const spreadsheetId = /\/spreadsheets\/d\/([\w-]{20,})/.exec(link)?.[1];
-  const gid = /[#?&]gid=(\d+)/.exec(link)?.[1];
-  return { spreadsheetId, gid };
 }
 
 // The anchors reach column AP (42) and row 41. A smaller tab, such as Ref,

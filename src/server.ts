@@ -6,6 +6,7 @@ import {
   InteractionResponseType,
   verifyKeyMiddleware,
 } from 'discord-interactions';
+import { liveApi } from './api/router.js';
 import { deferredCommands } from './commands/index.js';
 import { componentRoute } from './components.js';
 import { alertStaff, drain, inFlightCount, runDeferred, runDeferredUpdate } from './interactions.js';
@@ -37,6 +38,11 @@ app.get('/health', (_req, res) => {
   }
   res.send('ok');
 });
+
+// The read-only API for PokeTracker (docs/pktr-api.md). Off unless API_ENABLED
+// is set; until then it touches nothing and every /api/v1 path is a plain 404.
+const api = liveApi();
+app.use('/api/v1', api.router);
 
 // Discord's interaction payloads are a few KB. Reading the body is capped, so
 // an oversized request is refused before its signature is checked; the
@@ -117,7 +123,7 @@ const shutdown = async (signal: string) => {
   console.log(`${signal}: ${inFlightCount()} interaction(s) in progress; finishing them, then stopping`);
   server.close();
   const timedOut = await Promise.race([
-    Promise.all([drain(), nameSync?.stop()]).then(() => false),
+    Promise.all([drain(), nameSync?.stop(), api.stop()]).then(() => false),
     new Promise<true>((r) => setTimeout(() => r(true), DRAIN_MS).unref()),
   ]);
   if (timedOut) console.error(`stopping with ${inFlightCount()} interaction(s) still in progress after ${DRAIN_MS / 1000}s`);
@@ -150,4 +156,8 @@ console.log('startup finished; taking interactions');
 
 // The nightly name sync (Bot Spec: "Nickname sync"). If a night was missed, or
 // none was ever recorded, it runs now; after that, at 21:00 Denver.
-if (!shuttingDown) nameSync = startNameSync(guildId);
+if (!shuttingDown) {
+  nameSync = startNameSync(guildId);
+  // The API's snapshot refresh, once startup has finished: 503 until its first read.
+  api.start();
+}
