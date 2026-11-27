@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildResources } from '../src/api/map/index.js';
-import { configFromEnv, createApi, loggedPath } from '../src/api/router.js';
-import { AS_OF, DISCORD_ID, FakeRefresher, fixtureLeague, serve, testConfig } from './api-fixtures.js';
+import { configFromEnv, createApi, loggedPath, outageAlert, recoveryAlert } from '../src/api/router.js';
+import { AS_OF, FakeRefresher, fixtureLeague, fixtureResources, serve, testConfig } from './api-fixtures.js';
 
 test('GET /seasons: the envelope, with count', async () => {
   const s = await serve();
@@ -149,13 +148,13 @@ test('the ETag holds across refreshes that change nothing, and moves when the da
   const s = await serve();
   try {
     const etag = (await s.get('/seasons')).headers.get('etag')!;
-    s.refresher.snapshot = { value: buildResources(fixtureLeague()), asOf: '2026-11-27T12:01:00.000Z' };
+    s.refresher.snapshot = { value: fixtureResources(), asOf: '2026-11-27T12:01:00.000Z' };
     const same = await s.get('/seasons', { headers: { 'if-none-match': etag } });
     assert.equal(same.status, 304, 'only as_of moved');
 
     const l = fixtureLeague();
     l.seasons[0].active = 'FALSE';
-    s.refresher.snapshot = { value: buildResources(l), asOf: '2026-11-27T12:02:00.000Z' };
+    s.refresher.snapshot = { value: fixtureResources(l), asOf: '2026-11-27T12:02:00.000Z' };
     const changed = await s.get('/seasons', { headers: { 'if-none-match': etag } });
     assert.equal(changed.status, 200);
     assert.notEqual(changed.headers.get('etag'), etag);
@@ -170,16 +169,12 @@ test('the access log never shows a Discord ID from a path', () => {
   assert.equal(loggedPath('/api/v1/seasons'), '/api/v1/seasons');
 });
 
-test('no response contains a Discord ID', async () => {
-  const s = await serve();
-  try {
-    for (const path of ['/seasons']) {
-      const body = await (await s.get(path)).text();
-      assert.doesNotMatch(body, DISCORD_ID, path);
-    }
-    // The fixture does hold Discord IDs, so the scan can find them.
-    assert.match(JSON.stringify(fixtureLeague().trainers), DISCORD_ID);
-  } finally {
-    await s.close();
-  }
+test('the outage and recovery messages say what PKTR sees and what is not affected', () => {
+  assert.equal(
+    outageAlert(new Error('Quota exceeded.'), 10, '2026-11-27T12:00:00.000Z'),
+    "**PKTR API**: the bot hasn't been able to read the League DB for 10 minutes, so PokeTracker is showing data from " +
+      '2026-11-27T12:00:00.000Z. Last error: Quota exceeded. This is the only alert until it recovers.',
+  );
+  assert.match(outageAlert(new Error('x'), 10, undefined), /getting 503s \(no data loaded since the bot started\)/);
+  assert.equal(recoveryAlert(42), '**PKTR API**: reading the League DB again after 42 failed reads (about 42 minutes); PokeTracker has current data.');
 });

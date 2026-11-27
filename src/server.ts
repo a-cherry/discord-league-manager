@@ -39,8 +39,8 @@ app.get('/health', (_req, res) => {
   res.send('ok');
 });
 
-// The read-only API for PokeTracker (docs/pktr-api.md). Off unless API_ENABLED
-// is set; until then it touches nothing and every /api/v1 path is a plain 404.
+// The read-only JSON API for PokeTracker (src/api/). Off unless API_ENABLED is
+// set; until then it touches nothing and every /api/v1 path is a plain 404.
 const api = liveApi();
 app.use('/api/v1', api.router);
 

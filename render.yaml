@@ -53,7 +53,7 @@ services:
       # Optional: warn downgrades the match sequence rules to warnings.
       - key: GGB_SEQUENCE_RULES
         sync: false
-      # The read-only PokeTracker API (docs/pktr-api.md). Unset API_ENABLED keeps it off.
+      # The read-only PokeTracker API (src/api/). Unset API_ENABLED keeps it off.
       - key: API_ENABLED
         sync: false
       - key: API_KEYS

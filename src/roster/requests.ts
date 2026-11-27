@@ -3,6 +3,7 @@ import { getLeagueConfig } from '../config.js';
 import { cachedRoles, editMessage, escapeMarkdown, listMessages, postMessage, type ActionRow, type Message } from '../discord.js';
 import type { Row } from '../sheet-rows.js';
 import { findTrainer, mention, type League } from './league.js';
+import { playerOrCoach } from '../roles.js';
 
 export type RosterRequest = Row<'rosterRequests'>;
 export type RequestType = 'add' | 'remove' | 'update-trainer' | 'rebrand' | 'disband';
@@ -30,7 +31,9 @@ export function leadershipTitle(leadership: string): string | undefined {
   return ({ leader: roles.gymLeader, 'vice-leader': roles.gymViceLeader } as Record<string, string>)[leadership];
 }
 
-export const playerOrCoach = (role: string) => (role === 'non-playing' ? 'coach' : 'player');
+// Moved to src/roles.ts so the API can use it without importing Discord;
+// re-exported so callers of this module are unchanged.
+export { playerOrCoach } from '../roles.js';
 
 // An update-trainer's parts: the leadership it appoints, if any, and the move,
 // if the role changes or the target steps down from leadership.

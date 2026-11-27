@@ -4,3 +4,5 @@ dist/
 .env.*
 !.env.example
 assets/logos-original/
+# Working docs for agents building in this repo; not published.
+docs/

@@ -156,3 +156,83 @@ test('stop waits for a read in progress, clears the timer and serves nothing aft
   await settle();
   assert.equal(h.waiting().length, 0, 'no timer re-armed after stop');
 });
+
+// A refresher whose reads fail while `failing` is true, recording its alerts.
+function alerting(postFails = false) {
+  const state = { failing: true, outages: [] as [string, number, string | undefined][], recoveries: [] as number[] };
+  const timers: { fn: () => void; fired: boolean; cleared: boolean }[] = [];
+  const logs: string[] = [];
+  let reads = 0;
+  startRefresher<number>({
+    read: async () => {
+      reads++;
+      if (state.failing && reads > 1) throw new Error('quota exceeded');
+      return reads;
+    },
+    now: () => new Date('2026-11-27T12:00:00.000Z'),
+    setTimeout: (fn) => {
+      const t = { fn, fired: false, cleared: false };
+      timers.push(t);
+      return { clear: () => void (t.cleared = true) };
+    },
+    log: (m) => void logs.push(m),
+    onOutage: async (err, failures, asOf) => {
+      if (postFails) throw new Error('Discord is down');
+      state.outages.push([(err as Error).message, failures, asOf]);
+    },
+    onRecovery: async (failures) => void state.recoveries.push(failures),
+  });
+  const ticks = async (n: number) => {
+    for (let i = 0; i < n; i++) {
+      await settle();
+      const t = timers.find((x) => !x.fired && !x.cleared)!;
+      t.fired = true;
+      t.fn();
+    }
+    await settle();
+  };
+  return { state, logs, ticks };
+}
+
+test('staff are alerted once, at the 10th failed read in a row, and once on recovery', async () => {
+  const a = alerting();
+  await a.ticks(9);
+  assert.deepEqual(a.state.outages, [], 'nine minutes of failures: no alert yet');
+  await a.ticks(1);
+  assert.deepEqual(a.state.outages, [['quota exceeded', 10, '2026-11-27T12:00:00.000Z']]);
+  await a.ticks(50);
+  assert.equal(a.state.outages.length, 1, 'never repeated during the outage');
+  assert.deepEqual(a.state.recoveries, []);
+  a.state.failing = false;
+  await a.ticks(1);
+  assert.deepEqual(a.state.recoveries, [60]);
+  await a.ticks(3);
+  assert.deepEqual(a.state.recoveries, [60], 'one recovery message');
+});
+
+test('a short outage that recovers before 10 failures sends nothing', async () => {
+  const a = alerting();
+  await a.ticks(5);
+  a.state.failing = false;
+  await a.ticks(2);
+  assert.deepEqual(a.state.outages, []);
+  assert.deepEqual(a.state.recoveries, []);
+});
+
+test('a second outage gets its own alert', async () => {
+  const a = alerting();
+  await a.ticks(10);
+  a.state.failing = false;
+  await a.ticks(1);
+  a.state.failing = true;
+  await a.ticks(10);
+  assert.equal(a.state.outages.length, 2);
+});
+
+test('an alert that fails to post is logged and the refresh carries on', async () => {
+  const a = alerting(true);
+  await a.ticks(10);
+  assert.ok(a.logs.some((l) => l === 'could not post the outage alert: Discord is down'));
+  await a.ticks(2);
+  assert.ok(a.logs.at(-1)!.includes('12 in a row'), 'still reading every minute');
+});
